@@ -20,125 +20,135 @@ class MobileVideoPlayerScreen extends StatefulWidget {
 }
 
 class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
-  late final Player player;
-  late final VideoController controller;
-  bool _isControlsVisible = true;
+  late final Player player = Player();
+  late final VideoController controller = VideoController(player);
   bool _isLoading = true;
   String? _error;
-  bool _isFullscreen = false;
-  Timer? _hideControlsTimer;
+  Timer? _progressTimer;
+  bool _controlsVisible = true;
+  Timer? _controlsTimer;
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
-    // Set fullscreen by default on mobile
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializePlayer();
+    });
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
   }
 
   Future<void> _initializePlayer() async {
-    player = Player(
-      configuration: const PlayerConfiguration(
-        title: 'IPTV Player',
-      ),
-    );
-
-    controller = VideoController(
-      player,
-      configuration: const VideoControllerConfiguration(
-        enableHardwareAcceleration: true,
-      ),
-    );
-
+    if (!mounted) return;
+    
+    final l10n = AppLocalizations.of(context);
     try {
-      print('🎬 Opening media: ${widget.channel.url}');
-      await player.open(Media(widget.channel.url));
-      print('✅ Media opened successfully');
+      print('🎬 MediaKit Opening: ${widget.channel.url}');
 
-      // Disable subtitles by default
-      player.setSubtitleTrack(SubtitleTrack.no());
-
-      // Resume from saved progress if available
-      if (widget.channel.watchedMilliseconds > 0) {
-        await player.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
-      }
-
-      await DatabaseService.updateChannelPlayCount(widget.channel);
-
-      // Listen to player state
+      // Set up streams before opening
       player.stream.error.listen((error) {
-        print('❌ Player error: $error');
+        print('❌ MediaKit Error: $error');
         if (mounted) {
-          final l10n = AppLocalizations.of(context);
           setState(() {
-            _error = '${l10n.error}: $error';
+            _error = l10n.failedToLoadStream(error.toString());
+            _isLoading = false;
           });
         }
       });
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      player.stream.playing.listen((playing) {
+        if (playing && mounted && _isLoading) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      });
+
+      player.stream.completed.listen((completed) {
+        if (completed && widget.channel.contentType != ContentType.live) {
+          Navigator.pop(context);
+        }
+      });
+
+      // Simple watchdog for loading state
+      Timer(const Duration(seconds: 15), () {
+        if (mounted && _isLoading && _error == null) {
+          setState(() {
+            _error = "Playback timed out. The server might be busy or the link is broken.";
+            _isLoading = false;
+          });
+        }
+      });
+
+      // Using a standard browser User-Agent to avoid being blocked by some IPTV servers
+      // Some servers block default mpv/ffmpeg user agents on mobile devices.
+      await player.open(
+        Media(
+          widget.channel.url,
+          httpHeaders: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+          },
+        ),
+        play: true,
+      );
+
+      // Resume from saved progress if available (only for VOD)
+      if (widget.channel.contentType != ContentType.live &&
+          widget.channel.watchedMilliseconds > 0) {
+        await player.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
       }
-      print('🎥 Player initialized, loading = false');
+
+      // Update play count
+      await DatabaseService.updateChannelPlayCount(widget.channel);
+
+      // Start progress tracking timer for VOD content
+      if (widget.channel.contentType != ContentType.live) {
+        _startProgressTimer();
+      }
+
+      _hideControlsAfterDelay();
     } catch (e, stackTrace) {
       print('❌ Error initializing player: $e');
       print('Stack trace: $stackTrace');
       if (mounted) {
-        final l10n = AppLocalizations.of(context);
         setState(() {
           _error = l10n.failedToLoadStream(e.toString());
           _isLoading = false;
         });
       }
     }
-
-    // Auto-hide controls after 3 seconds
-    _startHideControlsTimer();
   }
 
-  void _startHideControlsTimer() {
-    _hideControlsTimer?.cancel();
-    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isControlsVisible) {
-        setState(() {
-          _isControlsVisible = false;
-        });
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _saveWatchProgress();
+    });
+  }
+
+  void _hideControlsAfterDelay() {
+    _controlsTimer?.cancel();
+    _controlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _controlsVisible = false);
       }
     });
   }
 
-  void _showControls() {
-    if (!_isControlsVisible) {
-      setState(() {
-        _isControlsVisible = true;
-      });
-    }
-    _startHideControlsTimer();
-  }
-
   void _toggleControls() {
-    setState(() {
-      _isControlsVisible = !_isControlsVisible;
-    });
-
-    if (_isControlsVisible) {
-      _startHideControlsTimer();
-    } else {
-      _hideControlsTimer?.cancel();
+    setState(() => _controlsVisible = !_controlsVisible);
+    if (_controlsVisible) {
+      _hideControlsAfterDelay();
     }
   }
 
   @override
   void dispose() {
-    _hideControlsTimer?.cancel();
-
-    // Restore orientation and system UI
+    _progressTimer?.cancel();
+    _controlsTimer?.cancel();
+    _saveWatchProgress();
+    player.dispose();
+    
+    // Restore orientation
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -147,18 +157,16 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
       DeviceOrientation.landscapeRight,
     ]);
 
-    // Save watch progress before disposing
-    _saveWatchProgress();
-
-    player.dispose();
     super.dispose();
   }
 
   Future<void> _saveWatchProgress() async {
-    final duration = player.state.duration;
-    final position = player.state.position;
+    if (widget.channel.contentType == ContentType.live) return;
 
-    if (duration != null && position != null) {
+    final position = player.state.position;
+    final duration = player.state.duration;
+
+    if (position != Duration.zero && duration != Duration.zero) {
       widget.channel.watchedMilliseconds = position.inMilliseconds;
       widget.channel.totalMilliseconds = duration.inMilliseconds;
       await DatabaseService.isar.writeTxn(() async {
@@ -172,206 +180,191 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
     setState(() {});
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-
-    if (hours > 0) {
-      return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
-    }
-    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        onTap: _toggleControls,
-        child: Stack(
-          children: [
-            // Video Player
-            if (_isLoading)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
-            else if (_error != null)
+      body: FocusableActionDetector(
+        autofocus: true,
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+            _toggleControls();
+            return null;
+          }),
+        },
+        onShowFocusHighlight: (val) {},
+        child: GestureDetector(
+          onTap: _toggleControls,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // MediaKit Video Widget
               Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 64,
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              Center(
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Video(
-                    controller: controller,
-                    controls: NoVideoControls,
-                  ),
-                ),
+                child: Video(controller: controller),
               ),
 
-            // Controls Overlay
-            if (_isControlsVisible && !_isLoading)
-              Container(
-                color: Colors.black.withOpacity(0.3),
-                child: SafeArea(
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator(color: Color(0xFF5DD3E5))),
+
+              if (_error != null)
+                Center(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Top bar
+                      const Icon(Icons.error_outline, color: Colors.red, size: 64),
+                      const SizedBox(height: 16),
                       Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                            Expanded(
-                              child: Text(
-                                widget.channel.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                widget.channel.isFavorite
-                                    ? Icons.favorite
-                                    : Icons.favorite_border,
-                                color: widget.channel.isFavorite
-                                    ? Colors.red
-                                    : Colors.white,
-                              ),
-                              onPressed: _toggleFavorite,
-                            ),
-                          ],
-                        ),
+                        padding: const EdgeInsets.all(24),
+                        child: Text(_error!, style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
                       ),
-
-                      const Spacer(),
-
-                      // Center play/pause button
-                      StreamBuilder<bool>(
-                        stream: player.stream.playing,
-                        builder: (context, snapshot) {
-                          final isPlaying = snapshot.data ?? false;
-                          return IconButton(
-                            icon: Icon(
-                              isPlaying ? Icons.pause : Icons.play_arrow,
-                              color: Colors.white,
-                              size: 64,
-                            ),
-                            onPressed: () {
-                              player.playOrPause();
-                            },
-                          );
-                        },
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(l10n.backButton),
                       ),
-
-                      // Only show progress bar for VOD content (movies/series)
-                      if (widget.channel.contentType != ContentType.live) ...[
-                        const Spacer(),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: StreamBuilder<Duration>(
-                            stream: player.stream.position,
-                            builder: (context, positionSnapshot) {
-                              return StreamBuilder<Duration>(
-                                stream: player.stream.duration,
-                                builder: (context, durationSnapshot) {
-                                  final position = positionSnapshot.data ?? Duration.zero;
-                                  final duration = durationSnapshot.data ?? Duration.zero;
-                                  final progress = duration.inMilliseconds > 0
-                                      ? position.inMilliseconds / duration.inMilliseconds
-                                      : 0.0;
-
-                                  return Column(
-                                    children: [
-                                      SliderTheme(
-                                        data: SliderThemeData(
-                                          trackHeight: 3,
-                                          thumbShape: const RoundSliderThumbShape(
-                                            enabledThumbRadius: 6,
-                                          ),
-                                          overlayShape: const RoundSliderOverlayShape(
-                                            overlayRadius: 12,
-                                          ),
-                                        ),
-                                        child: Slider(
-                                          value: progress.clamp(0.0, 1.0),
-                                          onChanged: (value) {
-                                            final newPosition = Duration(
-                                              milliseconds: (value * duration.inMilliseconds).round(),
-                                            );
-                                            player.seek(newPosition);
-                                          },
-                                          activeColor: Colors.red,
-                                          inactiveColor: Colors.white.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              _formatDuration(position),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            Text(
-                                              _formatDuration(duration),
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ] else
-                        const Spacer(),
                     ],
                   ),
                 ),
+
+              // Custom Overlay Controls
+              AnimatedOpacity(
+                opacity: _controlsVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible,
+                  child: _buildControls(l10n),
+                ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildControls(AppLocalizations l10n) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.5),
+      ),
+      child: Column(
+        children: [
+          // Top Bar
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Expanded(
+                  child: Text(
+                    widget.channel.name,
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    widget.channel.isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: widget.channel.isFavorite ? Colors.red : Colors.white,
+                  ),
+                  onPressed: _toggleFavorite,
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          // Bottom Controls
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              children: [
+                if (widget.channel.contentType != ContentType.live)
+                  _buildProgressBar(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.replay_10, color: Colors.white, size: 36),
+                      onPressed: () => player.seek(player.state.position - const Duration(seconds: 10)),
+                    ),
+                    const SizedBox(width: 32),
+                    StreamBuilder<bool>(
+                      stream: player.stream.playing,
+                      builder: (context, snapshot) {
+                        final playing = snapshot.data ?? false;
+                        return IconButton(
+                          icon: Icon(
+                            playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                            color: Colors.white,
+                            size: 64,
+                          ),
+                          onPressed: () => player.playOrPause(),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 32),
+                    IconButton(
+                      icon: const Icon(Icons.forward_10, color: Colors.white, size: 36),
+                      onPressed: () => player.seek(player.state.position + const Duration(seconds: 10)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressBar() {
+    return StreamBuilder<Duration>(
+      stream: player.stream.position,
+      builder: (context, snapshot) {
+        final position = snapshot.data ?? Duration.zero;
+        final duration = player.state.duration;
+        final progress = duration.inMilliseconds > 0 
+          ? position.inMilliseconds / duration.inMilliseconds 
+          : 0.0;
+
+        return Column(
+          children: [
+            Slider(
+              value: progress.clamp(0.0, 1.0),
+              activeColor: const Color(0xFF5DD3E5),
+              inactiveColor: Colors.white24,
+              onChanged: (val) {
+                final target = duration * val;
+                player.seek(target);
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_formatDuration(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(_formatDuration(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    if (duration.inHours > 0) {
+      return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    }
+    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 }

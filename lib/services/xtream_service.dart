@@ -16,17 +16,39 @@ class XtreamService {
   Map<String, String> _seriesCategories = {};
 
   XtreamService({
-    required this.baseUrl,
+    required String baseUrl,
     required this.username,
     required this.password,
-  });
+  }) : baseUrl = _normalizeUrl(baseUrl);
+
+  static String _normalizeUrl(String url) {
+    var normalized = url.trim();
+    // Remove trailing slashes
+    normalized = normalized.replaceAll(RegExp(r'/+$'), '');
+    // Remove /player_api.php if present
+    normalized = normalized.replaceAll(RegExp(r'/player_api\.php$'), '');
+    return normalized;
+  }
 
   /// Load live categories
   Future<void> _loadLiveCategories() async {
     try {
-      final url = '$baseUrl/player_api.php?username=$username&password=$password&action=get_live_categories';
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_live_categories',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
 
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      final response = await http.get(
+        uri, 
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as List;
@@ -47,9 +69,22 @@ class XtreamService {
   /// Load VOD categories
   Future<void> _loadVodCategories() async {
     try {
-      final url = '$baseUrl/player_api.php?username=$username&password=$password&action=get_vod_categories';
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_vod_categories',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
 
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      final response = await http.get(
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as List;
@@ -70,9 +105,22 @@ class XtreamService {
   /// Load series categories
   Future<void> _loadSeriesCategories() async {
     try {
-      final url = '$baseUrl/player_api.php?username=$username&password=$password&action=get_series_categories';
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_series_categories',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
 
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+      final response = await http.get(
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as List;
@@ -96,10 +144,21 @@ class XtreamService {
       // Load categories first
       await _loadLiveCategories();
 
-      final url = '$baseUrl/player_api.php?username=$username&password=$password&action=get_live_streams';
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_live_streams',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
 
       final response = await http.get(
-        Uri.parse(url),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -154,8 +213,21 @@ class XtreamService {
       // Load categories first
       await _loadVodCategories();
 
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_vod_streams',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/player_api.php?username=$username&password=$password&action=get_vod_streams'),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -193,8 +265,21 @@ class XtreamService {
       // Load categories first
       await _loadSeriesCategories();
 
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_series',
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/player_api.php?username=$username&password=$password&action=get_series'),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -229,8 +314,22 @@ class XtreamService {
   /// Get VOD (Movie) information
   Future<Map<String, dynamic>> getVodInfo(int vodId) async {
     try {
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_vod_info',
+        'vod_id': vodId.toString(),
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/player_api.php?username=$username&password=$password&action=get_vod_info&vod_id=$vodId'),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -258,8 +357,22 @@ class XtreamService {
   /// Get series information and episodes
   Future<Map<String, dynamic>> getSeriesInfo(int seriesId) async {
     try {
+      final queryParams = {
+        'username': username,
+        'password': password,
+        'action': 'get_series_info',
+        'series_id': seriesId.toString(),
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/player_api.php?username=$username&password=$password&action=get_series_info&series_id=$seriesId'),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -287,8 +400,20 @@ class XtreamService {
   /// Verify credentials by testing basic API call
   Future<bool> verifyCredentials() async {
     try {
+      final queryParams = {
+        'username': username,
+        'password': password,
+      };
+      
+      final baseUri = Uri.parse(baseUrl);
+      final uri = baseUri.replace(
+        path: '${baseUri.path.isEmpty || baseUri.path == "/" ? "" : baseUri.path}/player_api.php',
+        queryParameters: queryParams,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/player_api.php?username=$username&password=$password'),
+        uri,
+        headers: {'User-Agent': 'IPTVSmartersPlayer'},
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {

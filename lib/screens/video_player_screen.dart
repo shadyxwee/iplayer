@@ -25,8 +25,8 @@ class VideoPlayerScreen extends StatefulWidget {
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  late final Player player;
-  late final VideoController controller;
+  final Player player = Player();
+  late final VideoController controller = VideoController(player);
   bool _isControlsVisible = true;
   bool _isLoading = true;
   String? _error;
@@ -41,9 +41,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _initializePlayer() async {
-    player = Player();
-    controller = VideoController(player);
-
     try {
       await player.open(Media(widget.channel.url));
       // Disable subtitles by default

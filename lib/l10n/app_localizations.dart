@@ -358,6 +358,7 @@ class AppLocalizations {
       'refresh': 'Refresh',
       'more_options': 'More options',
       'channels': 'channels',
+      'playlist_manager': 'Playlist Manager',
     },
     'zh_CN': {
       // General
@@ -752,6 +753,7 @@ class AppLocalizations {
   String get playlists => translate('playlists');
   String get configuration => translate('configuration');
   String get epgGuide => translate('epg_guide');
+  String get playlistManager => translate('playlist_manager');
 
   String get play => translate('play');
   String get pause => translate('pause');

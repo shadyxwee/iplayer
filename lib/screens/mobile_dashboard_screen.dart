@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io' show Platform;
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../models/channel.dart';
 import '../models/playlist.dart';
@@ -7,6 +10,9 @@ import '../models/profile.dart';
 import '../services/database_service.dart';
 import '../services/preferences_service.dart';
 import '../widgets/language_selector.dart';
+import '../widgets/content_widgets.dart';
+import '../providers/theme_provider.dart';
+import '../utils/app_theme.dart';
 import 'mobile_live_tv_screen.dart';
 import 'mobile_movies_screen.dart';
 import 'mobile_series_screen.dart';
@@ -14,7 +20,7 @@ import 'playlist_manager_screen.dart';
 import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'epg_screen.dart';
-import 'android_video_player_screen.dart';
+import 'mobile_video_player_screen.dart';
 
 class MobileDashboardScreen extends StatefulWidget {
   final bool showWelcomeDialog;
@@ -35,32 +41,23 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   int _totalMovies = 0;
   int _totalSeries = 0;
 
-  final List<IconData> _avatarIcons = [
-    Icons.person,
-    Icons.face,
-    Icons.child_care,
-    Icons.elderly,
-    Icons.pets,
-    Icons.sports_esports,
-    Icons.music_note,
-    Icons.movie,
-  ];
-
-  final List<Color> _avatarColors = [
-    const Color(0xFF5DD3E5),
-    const Color(0xFF4CAF50),
-    const Color(0xFFFF9800),
-    const Color(0xFFE91E63),
-    const Color(0xFF9C27B0),
-    const Color(0xFF2196F3),
-    const Color(0xFFFFC107),
-    const Color(0xFFFF5722),
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Allow both orientations for better mobile experience
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  @override
+  void dispose() {
+    // Keep default orientations
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -69,23 +66,25 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
 
     Profile? activeProfile;
     if (profiles.isNotEmpty) {
-      activeProfile = profiles.first;
+      activeProfile = await DatabaseService.getActiveProfile();
     }
 
     final playlists = await DatabaseService.getAllPlaylists();
     Playlist? activePlaylist;
-    if (playlists.isNotEmpty) {
-      activePlaylist = playlists.first;
+    if (activePlaylistId != null) {
+      activePlaylist = await DatabaseService.getPlaylistById(activePlaylistId);
     }
 
-    final allChannels = await DatabaseService.getAllChannels();
+    final allChannels = activePlaylistId != null 
+        ? await DatabaseService.getChannelsByPlaylistId(activePlaylistId)
+        : await DatabaseService.getAllChannels();
     final recent = await DatabaseService.getRecentlyPlayedChannels(limit: 10);
     final favorites = await DatabaseService.getFavoriteChannels();
 
     if (mounted) {
       setState(() {
         _activeProfile = activeProfile;
-        _activePlaylist = activePlaylist;
+        _activePlaylist = activePlaylist ?? (playlists.isNotEmpty ? playlists.first : null);
         _availablePlaylists = playlists;
         _recentChannels = recent;
         _favoriteChannels = favorites;
@@ -99,532 +98,546 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final theme = themeProvider.currentTheme;
+
+    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1A2A),
-      drawer: _buildDrawer(l10n),
+      backgroundColor: const Color(0xFF0F0F1A),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(l10n),
-
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildModernHeader(l10n, theme),
+              const SizedBox(height: 32),
+              
+              // Top Grid and Quick Menu
+              if (isPortrait) ...[
+                // Vertical layout for portrait
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildLargeNavCard(
+                        l10n.liveTV,
+                        '${_totalChannels} Channels',
+                        Icons.live_tv_rounded,
+                        theme.accentPrimary,
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileLiveTVScreen())),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildLargeNavCard(
+                        l10n.movies,
+                        '${_totalMovies} Movies',
+                        Icons.movie_rounded,
+                        const Color(0xFF4CAF50),
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileMoviesScreen())),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildLargeNavCard(
+                        l10n.series,
+                        '${_totalSeries} Series',
+                        Icons.movie_filter_rounded,
+                        const Color(0xFFFF9800),
+                        () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileSeriesScreen())),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _buildQuickActionItem(l10n.playlistManager, Icons.playlist_add_check_rounded, () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const PlaylistManagerScreen())).then((_) => _loadData());
+                          }, theme),
+                          const SizedBox(height: 12),
+                          _buildQuickActionItem(l10n.refresh, Icons.refresh_rounded, _loadData, theme),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // Horizontal layout for landscape
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Stats cards
-                    _buildStatCard(l10n.channels, _totalChannels, Icons.tv, const Color(0xFF5DD3E5)),
-                    const SizedBox(height: 12),
-                    _buildStatCard(l10n.movies, _totalMovies, Icons.movie, const Color(0xFF4CAF50)),
-                    const SizedBox(height: 12),
-                    _buildStatCard(l10n.series, _totalSeries, Icons.video_library, const Color(0xFFFF9800)),
+                    // Main Category Cards
+                    Expanded(
+                      flex: 3,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildLargeNavCard(
+                              l10n.liveTV,
+                              '${_totalChannels} Channels',
+                              Icons.live_tv_rounded,
+                              theme.accentPrimary,
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileLiveTVScreen())),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildLargeNavCard(
+                              l10n.movies,
+                              '${_totalMovies} Movies',
+                              Icons.movie_rounded,
+                              const Color(0xFF4CAF50),
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileMoviesScreen())),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildLargeNavCard(
+                              l10n.series,
+                              '${_totalSeries} Series',
+                              Icons.movie_filter_rounded,
+                              const Color(0xFFFF9800),
+                              () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileSeriesScreen())),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    // Quick Actions List
+                    Expanded(
+                      flex: 1,
+                      child: Column(
+                        children: [
+                          _buildQuickActionItem(l10n.playlistManager, Icons.playlist_add_check_rounded, () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const PlaylistManagerScreen())).then((_) => _loadData());
+                          }, theme),
+                          const SizedBox(height: 12),
+                          _buildQuickActionItem(l10n.epgGuide, Icons.calendar_today_rounded, () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const EpgScreen()));
+                          }, theme),
+                          const SizedBox(height: 12),
+                          _buildQuickActionItem(l10n.refresh, Icons.refresh_rounded, _loadData, theme),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
 
-                    const SizedBox(height: 24),
+              const SizedBox(height: 48),
 
-                    // Main category buttons in a row
+              // Continue Watching Section
+              if (_recentChannels.isNotEmpty) ...[
+                _buildSectionHeader(l10n.continueWatching, Icons.history_rounded, theme),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    clipBehavior: Clip.none,
+                    itemCount: _recentChannels.length,
+                    itemBuilder: (context, index) {
+                      return _buildLandscapeContentCard(_recentChannels[index], theme, showProgress: true);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+
+              // Favorites Section
+              if (_favoriteChannels.isNotEmpty) ...[
+                _buildSectionHeader(l10n.myFavorites, Icons.favorite_rounded, theme),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 180,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                    clipBehavior: Clip.none,
+                    itemCount: _favoriteChannels.length,
+                    itemBuilder: (context, index) {
+                      return _buildFavoriteCircleCard(_favoriteChannels[index], theme);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 40),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernHeader(AppLocalizations l10n, AppThemeType theme) {
+    final now = DateTime.now();
+    final timeStr = DateFormat('hh:mm a').format(now);
+    final dateStr = DateFormat('MMMM dd, yyyy').format(now);
+
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.tv_rounded, color: Colors.white, size: 24),
+        ),
+        const SizedBox(width: 16),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _activePlaylist?.name ?? 'RIPTV',
+              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -1),
+            ),
+            Text(
+              '$timeStr | $dateStr',
+              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
+            ),
+          ],
+        ),
+        const Spacer(),
+        _buildCircularHeaderButton(Icons.person_rounded, () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfilesScreen()));
+          _loadData();
+        }),
+        const SizedBox(width: 12),
+        _buildCircularHeaderButton(Icons.settings_rounded, () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+        }),
+      ],
+    );
+  }
+
+  Widget _buildCircularHeaderButton(IconData icon, VoidCallback onTap) {
+    return _FocusableButton(
+      onTap: onTap,
+      builder: (context, focused) => Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: focused ? const Color(0xFF8B5CF6) : Colors.white.withOpacity(0.05),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildLargeNavCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+    return _FocusableButton(
+      onTap: onTap,
+      builder: (context, focused) => AnimatedScale(
+        scale: focused ? 1.05 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          height: 180,
+          decoration: BoxDecoration(
+            color: focused ? const Color(0xFF252545) : const Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: focused ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.05), width: focused ? 2 : 1),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 24,
+                left: 24,
+                child: Icon(icon, color: Colors.white.withOpacity(focused ? 0.2 : 0.1), size: 64),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    RichText(
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: title.split(' ')[0],
+                            style: TextStyle(color: focused ? Colors.white : color, fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          if (title.contains(' '))
+                            TextSpan(
+                              text: ' ${title.split(' ')[1]}',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        Expanded(
-                          child: _buildCategoryButton(
-                            l10n.liveTV,
-                            Icons.tv,
-                            const Color(0xFF5DD3E5),
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const MobileLiveTVScreen()),
-                              );
-                            },
-                          ),
+                        Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(color: focused ? Colors.white : Colors.white.withOpacity(0.3), shape: BoxShape.circle),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCategoryButton(
-                            l10n.movies,
-                            Icons.movie,
-                            const Color(0xFF4CAF50),
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const MobileMoviesScreen()),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildCategoryButton(
-                            l10n.series,
-                            Icons.video_library,
-                            const Color(0xFFFF9800),
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const MobileSeriesScreen()),
-                              );
-                            },
-                          ),
+                        const SizedBox(width: 8),
+                        Text(
+                          subtitle,
+                          style: TextStyle(color: Colors.white.withOpacity(focused ? 0.8 : 0.4), fontSize: 12),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 24),
-
-                    // Recent channels
-                    if (_recentChannels.isNotEmpty) ...[
-                      _buildSectionHeader(l10n.continueWatching, Icons.history),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 140,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _recentChannels.length,
-                          itemBuilder: (context, index) {
-                            return _buildRecentChannelCard(_recentChannels[index]);
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // Favorites
-                    if (_favoriteChannels.isNotEmpty) ...[
-                      _buildSectionHeader(l10n.myFavorites, Icons.favorite),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 140,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _favoriteChannels.length,
-                          itemBuilder: (context, index) {
-                            return _buildRecentChannelCard(_favoriteChannels[index]);
-                          },
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(AppLocalizations l10n) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF0F2438),
-            const Color(0xFF0B1A2A),
-          ],
-        ),
-      ),
-      child: Row(
-        children: [
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.tv, color: Color(0xFF5DD3E5), size: 28),
-          const SizedBox(width: 8),
-          const Text(
-            'IPTV',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.language, color: Colors.white),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const LanguageSelector(),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfilesScreen()),
-              );
-              _loadData();
-            },
-            child: _buildProfileAvatar(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileAvatar() {
-    if (_activeProfile == null || _activeProfile!.avatarUrl == null) {
-      return Container(
-        width: 36,
-        height: 36,
+  Widget _buildQuickActionItem(String label, IconData icon, VoidCallback onTap, AppThemeType theme) {
+    return _FocusableButton(
+      onTap: onTap,
+      builder: (context, focused) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: const Color(0xFF5DD3E5),
-          border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+          color: focused ? theme.accentPrimary.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: focused ? theme.accentPrimary : Colors.transparent),
         ),
-        child: const Icon(Icons.person, color: Colors.white, size: 20),
-      );
-    }
-
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: const Color(0xFF5DD3E5),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-      ),
-      child: const Icon(Icons.person, color: Colors.white, size: 20),
-    );
-  }
-
-  Widget _buildStatCard(String label, int count, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.2),
-            color.withOpacity(0.05),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: focused ? Colors.white : Colors.white.withOpacity(0.6), size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: focused ? Colors.white : Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
           ],
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                count.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildCategoryButton(String label, IconData icon, Color color, VoidCallback onTap) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          height: 100,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color.withOpacity(0.3),
-                color.withOpacity(0.1),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.4), width: 1),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, IconData icon) {
+  Widget _buildSectionHeader(String title, IconData icon, AppThemeType theme) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF5DD3E5), size: 20),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: theme.accentPrimary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: theme.accentPrimary, size: 20),
+        ),
+        const SizedBox(width: 16),
         Text(
           title,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [theme.accentPrimary.withOpacity(0.3), Colors.transparent],
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildRecentChannelCard(Channel channel) {
-    return Container(
-      width: 120,
-      margin: const EdgeInsets.only(right: 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AndroidVideoPlayerScreen(channel: channel),
-              ),
-            );
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1A3A52).withOpacity(0.6),
-                  const Color(0xFF0D2235).withOpacity(0.4),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF2D5F8D).withOpacity(0.3),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E3A5F).withOpacity(0.3),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
-                        topRight: Radius.circular(8),
+  Widget _buildLandscapeContentCard(Channel channel, AppThemeType theme, {bool showProgress = false}) {
+    return _FocusableButton(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => MobileVideoPlayerScreen(channel: channel)))
+          .then((_) => _loadData());
+      },
+      builder: (context, focused) => Container(
+        width: 300,
+        margin: const EdgeInsets.only(right: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E32),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: focused ? theme.accentPrimary : Colors.white.withOpacity(0.05), width: 2),
+                  boxShadow: [
+                    if (focused) BoxShadow(color: theme.accentPrimary.withOpacity(0.3), blurRadius: 15),
+                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4)),
+                  ],
+                  image: channel.logo != null && channel.logo!.isNotEmpty ? DecorationImage(
+                    image: NetworkImage(channel.logo!),
+                    fit: BoxFit.cover,
+                  ) : null,
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (channel.logo == null || channel.logo!.isEmpty)
+                      const Center(child: Icon(Icons.movie_rounded, color: Colors.white10, size: 56)),
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+                        child: Icon(
+                          channel.contentType == ContentType.live ? Icons.live_tv_rounded : Icons.play_arrow_rounded,
+                          color: Colors.white, 
+                          size: 16
+                        ),
                       ),
                     ),
-                    child: Center(
-                      child: channel.logo != null && channel.logo!.isNotEmpty
-                          ? Image.network(
-                              channel.logo!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Icon(
-                                Icons.tv,
-                                color: Colors.white.withOpacity(0.3),
-                                size: 32,
+                    if (showProgress)
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 5,
+                          decoration: const BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(22)),
+                          ),
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: 0.65,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: theme.accentPrimary,
+                                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(22)),
                               ),
-                            )
-                          : Icon(
-                              Icons.tv,
-                              color: Colors.white.withOpacity(0.3),
-                              size: 32,
                             ),
-                    ),
-                  ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(
-                    channel.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(AppLocalizations l10n) {
-    return Drawer(
-      backgroundColor: const Color(0xFF0F2438),
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          DrawerHeader(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1E3A5F),
-                  const Color(0xFF2D5F8D),
-                ],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.tv, color: Colors.white, size: 48),
-                const SizedBox(height: 8),
-                const Text(
-                  'RIPTV',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (_activeProfile != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _activeProfile!.name,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ],
+            const SizedBox(height: 14),
+            Text(
+              channel.name,
+              style: TextStyle(
+                color: Colors.white, 
+                fontSize: 16, 
+                fontWeight: focused ? FontWeight.w900 : FontWeight.w700,
+                letterSpacing: -0.2
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          _buildDrawerItem(
-            icon: Icons.home,
-            title: l10n.dashboard,
-            onTap: () => Navigator.pop(context),
-          ),
-          _buildDrawerItem(
-            icon: Icons.tv,
-            title: l10n.liveTV,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MobileLiveTVScreen()),
-              );
-            },
-          ),
-          _buildDrawerItem(
-            icon: Icons.movie,
-            title: l10n.movies,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MobileMoviesScreen()),
-              );
-            },
-          ),
-          _buildDrawerItem(
-            icon: Icons.video_library,
-            title: l10n.series,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MobileSeriesScreen()),
-              );
-            },
-          ),
-          _buildDrawerItem(
-            icon: Icons.playlist_play,
-            title: l10n.playlists,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PlaylistManagerScreen()),
-              );
-            },
-          ),
-          _buildDrawerItem(
-            icon: Icons.calendar_month,
-            title: l10n.epgGuide,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const EpgScreen()),
-              );
-            },
-          ),
-          _buildDrawerItem(
-            icon: Icons.settings,
-            title: l10n.settings,
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
-            },
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              channel.group ?? 'Category',
+              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDrawerItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.white70),
-      title: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
+  Widget _buildFavoriteCircleCard(Channel channel, AppThemeType theme) {
+    return _FocusableButton(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => MobileVideoPlayerScreen(channel: channel)))
+          .then((_) => _loadData());
+      },
+      builder: (context, focused) => Container(
+        width: 140,
+        margin: const EdgeInsets.only(right: 16),
+        child: Column(
+          children: [
+            Expanded(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A2E),
+                  shape: BoxShape.rectangle,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: focused ? theme.accentPrimary : Colors.transparent, width: 2),
+                  image: channel.logo != null && channel.logo!.isNotEmpty ? DecorationImage(
+                    image: NetworkImage(channel.logo!),
+                    fit: BoxFit.cover,
+                  ) : null,
+                ),
+                child: channel.logo == null || channel.logo!.isEmpty
+                  ? const Center(child: Icon(Icons.movie_rounded, color: Colors.white10, size: 40))
+                  : null,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              channel.name,
+              style: TextStyle(color: focused ? theme.accentPrimary : Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
-      onTap: onTap,
+    );
+  }
+}
+
+class _FocusableButton extends StatefulWidget {
+  final Widget Function(BuildContext context, bool focused) builder;
+  final VoidCallback onTap;
+
+  const _FocusableButton({required this.builder, required this.onTap});
+
+  @override
+  State<_FocusableButton> createState() => _FocusableButtonState();
+}
+
+class _FocusableButtonState extends State<_FocusableButton> {
+  bool _isFocused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusableActionDetector(
+      onFocusChange: (val) => setState(() => _isFocused = val),
+      onShowFocusHighlight: (val) => setState(() => _isFocused = val),
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onTap()),
+      },
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: widget.builder(context, _isFocused),
+      ),
     );
   }
 }

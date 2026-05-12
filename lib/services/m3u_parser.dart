@@ -4,7 +4,10 @@ import '../models/channel.dart';
 
 class M3UParser {
   static Future<List<Channel>> parseFromUrl(String url) async {
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'User-Agent': 'IPTVSmartersPlayer'},
+    );
     if (response.statusCode == 200) {
       final content = utf8.decode(response.bodyBytes);
       return parseString(content);

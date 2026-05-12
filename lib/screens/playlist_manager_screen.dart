@@ -35,6 +35,14 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
     setState(() => _activePlaylistId = id);
   }
 
+  Future<void> _usePlaylist(Playlist playlist) async {
+    if (playlist.id == null) return;
+    
+    await PreferencesService.setActivePlaylistId(playlist.id);
+    await _loadActivePlaylistId();
+    _showSuccessSnackBar('Playlist "${playlist.name}" is now active');
+  }
+
   Future<void> _loadPlaylists() async {
     setState(() => _isLoading = true);
     final playlists = await DatabaseService.getAllPlaylists();
@@ -375,6 +383,16 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
               ),
             ),
             const Divider(height: 1),
+            if (playlist.id != _activePlaylistId)
+              _buildOptionTile(
+                icon: Icons.play_circle_outline_rounded,
+                label: 'Use this Playlist',
+                theme: theme,
+                onTap: () {
+                  Navigator.pop(context);
+                  _usePlaylist(playlist);
+                },
+              ),
             _buildOptionTile(
               icon: Icons.edit_outlined,
               label: l10n.editPlaylistOption,
@@ -551,10 +569,17 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: theme.textSecondary, fontWeight: FontWeight.w600)),
-          Text(value, style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800)),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(color: theme.textPrimary, fontWeight: FontWeight.w800),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -672,6 +697,28 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
     );
   }
 
+  Widget _buildSmallButton(String label, Color color, VoidCallback onTap) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(AppLocalizations l10n, AppThemeType theme) {
     return Center(
       child: Padding(
@@ -773,7 +820,14 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showPlaylistOptions(playlist, theme),
+          onTap: () {
+            if (isActive) {
+              _showPlaylistOptions(playlist, theme);
+            } else {
+              _usePlaylist(playlist);
+            }
+          },
+          onLongPress: () => _showPlaylistOptions(playlist, theme),
           borderRadius: BorderRadius.circular(32),
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -820,7 +874,7 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
                               playlist.name,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 20,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -0.5,
                               ),
@@ -828,39 +882,44 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (isActive)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              margin: const EdgeInsets.only(left: 12),
-                              decoration: BoxDecoration(
-                                color: theme.accentPrimary.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                'ACTIVE',
-                                style: TextStyle(
-                                  color: theme.accentPrimary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      if (isActive)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: theme.accentPrimary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'ACTIVE',
+                              style: TextStyle(
+                                color: theme.accentPrimary,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      // Responsive info rows
                       Row(
                         children: [
                           _buildInfoChip(
                             Icons.video_library_rounded,
-                            '${playlist.channelCount} items',
+                            '${playlist.channelCount}',
                             theme: theme,
                           ),
-                          const SizedBox(width: 20),
-                          _buildInfoChip(
-                            Icons.update_rounded,
-                            _formatDate(playlist.lastUpdated, l10n),
-                            theme: theme,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildInfoChip(
+                              Icons.update_rounded,
+                              _formatDate(playlist.lastUpdated, l10n),
+                              theme: theme,
+                            ),
                           ),
                         ],
                       ),
@@ -868,13 +927,74 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
                   ),
                 ),
                 
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 
-                // More Action
-                _buildTopActionButton(Icons.more_horiz_rounded, () => _showPlaylistOptions(playlist, theme)),
+                // Use/Active Status & More
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isActive)
+                      SizedBox(
+                        width: 90,
+                        height: 45,
+                        child: ElevatedButton(
+                          onPressed: () => _usePlaylist(playlist),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.accentPrimary,
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 4,
+                            shadowColor: theme.accentPrimary.withOpacity(0.4),
+                          ),
+                          child: const Text(
+                            'USE',
+                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.accentPrimary.withOpacity(0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: theme.accentPrimary.withOpacity(0.3)),
+                        ),
+                        child: Icon(Icons.check_rounded, color: theme.accentPrimary, size: 24),
+                      ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildSmallIconButton(Icons.refresh_rounded, theme.textSecondary.withOpacity(0.1), () => _refreshPlaylist(playlist), theme),
+                        const SizedBox(width: 8),
+                        _buildSmallIconButton(Icons.more_horiz_rounded, theme.textSecondary.withOpacity(0.1), () => _showPlaylistOptions(playlist, theme), theme),
+                      ],
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSmallIconButton(IconData icon, Color color, VoidCallback onTap, AppThemeType theme) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: Icon(icon, color: Colors.white.withOpacity(0.7), size: 18),
         ),
       ),
     );
@@ -1052,7 +1172,15 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
         final pass = uri.queryParameters['password'];
         
         if (user != null && pass != null) {
-          final host = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
+          // Construct host preserving path but removing filename
+          var hostPath = uri.path;
+          if (hostPath.endsWith('/get.php')) {
+            hostPath = hostPath.substring(0, hostPath.length - 8);
+          } else if (hostPath.endsWith('/player_api.php')) {
+            hostPath = hostPath.substring(0, hostPath.length - 15);
+          }
+          
+          final host = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}$hostPath';
           
           if (_sourceType != PlaylistSourceType.xtreamCodes) {
             setState(() {
@@ -1106,9 +1234,9 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
 
     try {
       final service = XtreamService(
-        baseUrl: _hostController.text.replaceAll(RegExp(r'/*$'), ''),
-        username: _usernameController.text,
-        password: _passwordController.text,
+        baseUrl: _hostController.text.trim().replaceAll(RegExp(r'/*$'), ''),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text.trim(),
       );
 
       final isValid = await service.verifyCredentials();
@@ -1138,15 +1266,17 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
     return Dialog(
       backgroundColor: theme.backgroundSecondary,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               // Header
               Row(
                 children: [
@@ -1439,8 +1569,10 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -1457,6 +1589,8 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
       controller: controller,
       maxLines: maxLines,
       obscureText: obscureText,
+      autocorrect: false,
+      enableSuggestions: false,
       style: TextStyle(color: theme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
@@ -1499,7 +1633,7 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
         playlist.username = null;
         playlist.password = null;
       } else {
-        playlist.url = _hostController.text.replaceAll(RegExp(r'/*$'), '');
+        playlist.url = _hostController.text.trim().replaceAll(RegExp(r'/*$'), '');
         playlist.username = _usernameController.text.trim();
         playlist.password = _passwordController.text.trim();
       }

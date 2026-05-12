@@ -85,9 +85,9 @@ class _AddSourceScreenState extends State<AddSourceScreen> {
 
     try {
       final service = XtreamService(
-        baseUrl: _baseUrlController.text.replaceAll(RegExp(r'/*$'), ''),
-        username: _usernameController.text,
-        password: _passwordController.text,
+        baseUrl: _baseUrlController.text.trim().replaceAll(RegExp(r'/*$'), ''),
+        username: _usernameController.text.trim(),
+        password: _passwordController.text.trim(),
       );
 
       // Verify credentials
@@ -228,6 +228,9 @@ class _AddSourceScreenState extends State<AddSourceScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _m3uUrlController,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.url,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: l10n.playlistUrlHint,
@@ -273,6 +276,9 @@ class _AddSourceScreenState extends State<AddSourceScreen> {
               const SizedBox(height: 8),
               TextField(
                 controller: _baseUrlController,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.url,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: l10n.serverHostHint,
@@ -306,6 +312,8 @@ class _AddSourceScreenState extends State<AddSourceScreen> {
               const SizedBox(height: 8),
               TextField(
                 controller: _usernameController,
+                autocorrect: false,
+                enableSuggestions: false,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: l10n.usernameHint,
@@ -340,6 +348,8 @@ class _AddSourceScreenState extends State<AddSourceScreen> {
               TextField(
                 controller: _passwordController,
                 obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: l10n.passwordHint,

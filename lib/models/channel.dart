@@ -17,6 +17,7 @@ class Channel {
   String? logo;
   String? group;
   int? tvgId;
+  int? number;
   String? tvgName;
   String? tvgLogo;
   String? groupTitle;
@@ -141,7 +142,11 @@ class Channel {
 
     // Parse attributes
     final tvgIdMatch = RegExp(r'tvg-id="([^"]*)"').firstMatch(line);
-    channel.tvgName = tvgIdMatch?.group(1);
+    final tvgIdStr = tvgIdMatch?.group(1);
+    if (tvgIdStr != null && tvgIdStr.isNotEmpty) {
+      channel.tvgId = int.tryParse(tvgIdStr);
+      channel.number = channel.tvgId;
+    }
 
     final tvgNameMatch = RegExp(r'tvg-name="([^"]*)"').firstMatch(line);
     if (tvgNameMatch != null) {
