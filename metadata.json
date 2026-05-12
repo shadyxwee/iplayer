@@ -1,0 +1,6 @@
+{
+  "name": "IPTVPlayer",
+  "description": "A professional IPTV player application built with Flutter, supporting multiple languages (English, Chinese, Russian, Spanish). Features M3U, Xtream Codes, and EPG support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

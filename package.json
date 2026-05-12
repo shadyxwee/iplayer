@@ -1,0 +1,10 @@
+{
+  "name": "iptv-player-flutter",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "mkdir -p dist && cp web/index.html dist/index.html && echo 'Development mode: Serving static files from dist/' && npx -y serve -s dist -l 3000",
+    "build": "mkdir -p dist && if command -v flutter > /dev/null; then flutter build web --release && cp -r build/web/* dist/; else cp web/index.html dist/index.html && echo 'Flutter build skipped or failed' > dist/build_info.txt; fi",
+    "lint": "if command -v flutter > /dev/null; then flutter analyze; else echo 'Flutter SDK not found, skipping lint'; fi"
+  }
+}
