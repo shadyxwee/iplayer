@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:media_kit/media_kit.dart';
@@ -28,18 +29,76 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   // Video player
   Player? player;
   VideoController? controller;
+  
+  // Seamless Recovery State
+  Player? _stagingPlayer;
+  VideoController? _stagingController;
+
   bool _isPlayerInitialized = false;
   bool _isFullscreen = false;
+  
+  // Watchdog for stall detection
+  DateTime? _lastPositionUpdateTime;
+  Duration? _lastPosition;
+  bool _isReconnecting = false;
+  int _recoveryLevel = 0; // 0: None, 1: Soft, 2: Background
+  Timer? _stallWatchdog;
+  int _consecutiveFailures = 0;
 
   @override
   void initState() {
     super.initState();
     _loadChannels();
+    _startStallWatchdog();
+  }
+
+  void _startStallWatchdog() {
+    _stallWatchdog?.cancel();
+    _stallWatchdog = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!mounted || _selectedChannel == null || player == null || _isReconnecting) return;
+
+      final pos = player!.state.position;
+      final isPlaying = player!.state.playing;
+
+      if (isPlaying && _lastPosition != null && _lastPosition == pos) {
+        if (_lastPositionUpdateTime != null && 
+            DateTime.now().difference(_lastPositionUpdateTime!).inSeconds > 15) {
+          print('⚠️ Stall detected. Triggering dynamic recovery...');
+          _triggerRecovery();
+        }
+      } else {
+        _lastPosition = pos;
+        _lastPositionUpdateTime = DateTime.now();
+      }
+    });
+  }
+
+  void _triggerRecovery() async {
+    if (_isReconnecting || _selectedChannel == null) return;
+    
+    _isReconnecting = true;
+    _recoveryLevel++;
+    
+    // Level 1: Soft re-stream
+    if (_recoveryLevel <= 2) {
+      print('🔄 Recovery Level 1: Soft Re-Stream (Reloading)...');
+      try {
+        await _openMedia(player!, _selectedChannel!);
+        _isReconnecting = false;
+      } catch (e) {
+        _isReconnecting = false;
+      }
+    } else {
+      print('🔄 Recovery Level 2: Hard Refresh...');
+      _playChannel(_selectedChannel!);
+    }
   }
 
   @override
   void dispose() {
+    _stallWatchdog?.cancel();
     player?.dispose();
+    _stagingPlayer?.dispose();
     super.dispose();
   }
 
@@ -96,26 +155,131 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   }
 
   Future<void> _playChannel(Channel channel) async {
-    // Dispose old player
-    await player?.dispose();
-
-    // Create new player
+    // Background Buffer initialization
     final newPlayer = Player();
     final newController = VideoController(newPlayer);
+    
+    if (player != null) {
+      setState(() {
+        _stagingPlayer = newPlayer;
+        _stagingController = newController;
+      });
+    }
 
-    setState(() {
-      _selectedChannel = channel;
-      player = newPlayer;
-      controller = newController;
-      _isPlayerInitialized = false;
+    // Hardening Native Properties for Rockchip / OMX stability
+    try {
+      final dynamic native = newPlayer.platform;
+      final String url = channel.url.toLowerCase();
+
+      // Anti-Black Screen & Texture Persistence
+      native.setProperty('keep-open', 'yes');
+      native.setProperty('force-window', 'yes');
+      
+      // Use Software Decoding for Live IPTV to avoid buggy HW OMX format change crashes
+      native.setProperty('hwdec', 'no'); 
+      native.setProperty('msg-level', 'all=warn,ffmpeg=error,ffmpeg/video=error');
+
+      if (url.contains('.m3u8')) {
+        native.setProperty('demuxer-max-bytes', '16777216'); // 16MB
+        native.setProperty('cache-secs', '6');
+        native.setProperty('hls-live-edge', '1');
+        native.setProperty('hls-bitrate', 'max');
+        native.setProperty('hls-reload-mode', 'all');
+      } else if (url.contains('.ts') || url.contains('/live/')) {
+        native.setProperty('demuxer-max-bytes', '67108864'); // 64MB
+        native.setProperty('cache-secs', '20');
+        native.setProperty('stream-buffer-size', '512k');
+      } else {
+        native.setProperty('demuxer-max-bytes', '134217728'); // 128MB
+        native.setProperty('cache-secs', '45');
+      }
+
+      native.setProperty('demuxer-max-back-bytes', '0'); // NO BACK BYTES (Prevents rewind loops)
+      native.setProperty('cache', 'yes');
+      native.setProperty('http-reconnect', 'yes');
+      native.setProperty('live-auto-range', 'yes');
+      native.setProperty('demuxer-lavf-o', 'reconnect_at_eof=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=4xx,5xx,reconnect_delay_max=2');
+      native.setProperty('network-timeout', '20');
+      native.setProperty('framedrop', 'vo');
+      native.setProperty('vd-lavc-threads', '4');
+      native.setProperty('mc', '0');
+    } catch (e) {
+      print('Warning: Native property override failed: $e');
+    }
+
+    newPlayer.stream.playing.listen((playing) {
+      if (playing && mounted) {
+        if (player != null && player != newPlayer) {
+          // Swap only when visual frame is confirmed
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (!mounted) return;
+            final oldPlayer = player;
+            setState(() {
+              _selectedChannel = channel;
+              player = newPlayer;
+              controller = newController;
+              _stagingPlayer = null;
+              _stagingController = null;
+              _isPlayerInitialized = true;
+              _isReconnecting = false;
+              _recoveryLevel = 0;
+              _lastPositionUpdateTime = DateTime.now();
+            });
+            Future.delayed(const Duration(seconds: 1), () => oldPlayer?.dispose());
+          });
+        } else if (player == null) {
+          setState(() {
+            _selectedChannel = channel;
+            player = newPlayer;
+            controller = newController;
+            _isPlayerInitialized = true;
+            _isReconnecting = false;
+            _recoveryLevel = 0;
+          });
+        }
+      }
     });
 
+    newPlayer.stream.completed.listen((completed) {
+      if (completed && mounted && !_isReconnecting) {
+        _triggerRecovery();
+      }
+    });
+
+    newPlayer.stream.error.listen((error) {
+      if (mounted && !_isReconnecting) {
+        final errStr = error.toString().toLowerCase();
+        if (errStr.contains('format changed') || errStr.contains('bad codec') || errStr.contains('output format') || errStr.contains('omx')) {
+          print('ℹ️ Suppressing non-fatal hardware decoder warning: $error');
+          return;
+        }
+
+        print('❌ Fatal Stream failure: $error');
+        _triggerRecovery();
+      }
+    });
+
+    newPlayer.stream.position.listen((pos) {
+       // Obsolete: Replaced by watchdog
+    });
+
+    await _openMedia(newPlayer, channel);
+  }
+
+  Future<void> _openMedia(Player p, Channel channel) async {
     try {
-      await newPlayer.open(Media(channel.url));
+      await p.open(
+        Media(
+          channel.url,
+          httpHeaders: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
+            'Connection': 'keep-alive',
+            'Accept': '*/*',
+          },
+        ),
+        play: true,
+      );
       await DatabaseService.updateChannelPlayCount(channel);
-      setState(() {
-        _isPlayerInitialized = true;
-      });
     } catch (e) {
       print('Error playing channel: $e');
     }
@@ -656,16 +820,30 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
                         // Video player
                         Expanded(
-                          child: controller != null && _isPlayerInitialized
-                              ? Video(
-                                  controller: controller!,
-                                  controls: NoVideoControls,
-                                )
-                              : Center(
-                                  child: CircularProgressIndicator(
-                                    color: theme.accentPrimary,
+                          child: Stack(
+                            children: [
+                               // BACKGROUND LAYER (Recovery Buffer)
+                               if (_stagingController != null)
+                                 SizedBox.expand(
+                                    child: Video(
+                                      controller: _stagingController!,
+                                      controls: NoVideoControls,
+                                    ),
                                   ),
-                                ),
+
+                              // FOREGROUND LAYER (Main Video)
+                              controller != null && _isPlayerInitialized
+                                  ? Video(
+                                      controller: controller!,
+                                      controls: NoVideoControls,
+                                    )
+                                  : Center(
+                                      child: CircularProgressIndicator(
+                                        color: theme.accentPrimary,
+                                      ),
+                                    ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

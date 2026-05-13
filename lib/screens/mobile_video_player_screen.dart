@@ -20,13 +20,23 @@ class MobileVideoPlayerScreen extends StatefulWidget {
 }
 
 class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
-  late final Player player = Player();
-  late final VideoController controller = VideoController(player);
+  Player? player;
+  VideoController? controller;
+  
+  // Seamless Recovery State
+  Player? _stagingPlayer;
+  VideoController? _stagingController;
+
   bool _isLoading = true;
   String? _error;
   Timer? _progressTimer;
   bool _controlsVisible = true;
   Timer? _controlsTimer;
+
+  // Watchdog for stall detection
+  DateTime? _lastPositionUpdateTime;
+  Duration? _lastPosition;
+  bool _isReconnecting = false;
 
   @override
   void initState() {
@@ -42,74 +52,149 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
     
     final l10n = AppLocalizations.of(context);
     try {
-      print('🎬 MediaKit Opening: ${widget.channel.url}');
+      // Create new player instance (Seamless background initialization)
+      final newPlayer = Player();
+      final newController = VideoController(newPlayer);
 
-      // Set up streams before opening
-      player.stream.error.listen((error) {
-        print('❌ MediaKit Error: $error');
-        if (mounted) {
-          setState(() {
-            _error = l10n.failedToLoadStream(error.toString());
-            _isLoading = false;
-          });
+      if (player != null) {
+        print('🔄 Seamless Recovery: Initiating background player...');
+        setState(() {
+          _stagingPlayer = newPlayer;
+          _stagingController = newController;
+        });
+      }
+
+      // Smarter Buffering Algorithm
+      try {
+        final dynamic native = newPlayer.platform;
+        final String url = widget.channel.url.toLowerCase();
+        
+        if (url.contains('.m3u8')) {
+          native.setProperty('demuxer-max-bytes', '67108864'); // 64MB
+          native.setProperty('cache-secs', '15');
+          native.setProperty('hls-bitrate', 'max');
+          native.setProperty('hls-reload-mode', 'all');
+        } else if (url.contains('.ts') || url.contains('/live/')) {
+          native.setProperty('demuxer-max-bytes', '167772160'); // 160MB
+          native.setProperty('cache-secs', '60');
+        } else if (widget.channel.contentType != ContentType.live) {
+          native.setProperty('demuxer-max-bytes', '268435456'); // 256MB
+          native.setProperty('cache-secs', '300');
+        } else {
+          native.setProperty('demuxer-max-bytes', '134217728'); // 128MB
+          native.setProperty('cache-secs', '45');
+        }
+
+        native.setProperty('demuxer-max-back-bytes', '67108864'); 
+        native.setProperty('cache', 'yes');
+        native.setProperty('http-reconnect', 'yes');
+        native.setProperty('live-auto-range', 'yes');
+        native.setProperty('demuxer-lavf-o', 'reconnect_at_eof=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=403,404,5xx,reconnect_delay_max=5');
+        native.setProperty('network-timeout', '60');
+        native.setProperty('framedrop', 'vo');
+        native.setProperty('vd-lavc-fast', 'yes');
+        native.setProperty('rtsp-transport', 'tcp');
+        native.setProperty('tls-verify', 'no');
+        native.setProperty('cookies', 'yes');
+      } catch (e) {
+        print('Warning: Could not set native properties: $e');
+      }
+
+      newPlayer.stream.playing.listen((playing) {
+        if (playing && mounted) {
+          if (player != null && player != newPlayer) {
+             // Wait for texture stabilization
+             Future.delayed(const Duration(milliseconds: 250), () {
+               if (!mounted) return;
+               final oldPlayer = player;
+               setState(() {
+                 player = newPlayer;
+                 controller = newController;
+                 _stagingPlayer = null;
+                 _stagingController = null;
+                 _isLoading = false;
+                 _isReconnecting = false;
+                 _lastPosition = null;
+                 _lastPositionUpdateTime = DateTime.now();
+               });
+               oldPlayer?.dispose();
+             });
+          } else if (player == null) {
+            setState(() {
+              player = newPlayer;
+              controller = newController;
+              _isLoading = false;
+              _isReconnecting = false;
+            });
+          }
         }
       });
 
-      player.stream.playing.listen((playing) {
-        if (playing && mounted && _isLoading) {
-          setState(() {
-            _isLoading = false;
-          });
+      newPlayer.stream.error.listen((error) {
+        if (mounted && !_isReconnecting) {
+          if (widget.channel.contentType == ContentType.live) {
+             _isReconnecting = true;
+             _initializePlayer();
+          } else {
+            setState(() {
+              _error = l10n.failedToLoadStream(error.toString());
+              _isLoading = false;
+            });
+          }
         }
       });
 
-      player.stream.completed.listen((completed) {
-        if (completed && widget.channel.contentType != ContentType.live) {
-          Navigator.pop(context);
+      newPlayer.stream.completed.listen((completed) {
+        if (completed && mounted && !_isReconnecting) {
+          if (widget.channel.contentType == ContentType.live) {
+            _isReconnecting = true;
+            _initializePlayer(); 
+          } else {
+            Navigator.of(context).pop();
+          }
         }
       });
 
-      // Simple watchdog for loading state
-      Timer(const Duration(seconds: 15), () {
-        if (mounted && _isLoading && _error == null) {
-          setState(() {
-            _error = "Playback timed out. The server might be busy or the link is broken.";
-            _isLoading = false;
-          });
+      newPlayer.stream.position.listen((pos) {
+        if (!mounted || widget.channel.contentType != ContentType.live || player != newPlayer) return;
+
+        if (_lastPosition != null && _lastPosition == pos) {
+          if (_lastPositionUpdateTime != null && 
+              DateTime.now().difference(_lastPositionUpdateTime!).inSeconds > 8 &&
+              !_isReconnecting && newPlayer.state.playing) {
+            print('⚠️ Seamless Recovery: Stall detected, using background buffer...');
+            _isReconnecting = true;
+            _initializePlayer();
+          }
+        } else {
+          _lastPosition = pos;
+          _lastPositionUpdateTime = DateTime.now();
         }
       });
 
-      // Using a standard browser User-Agent to avoid being blocked by some IPTV servers
-      // Some servers block default mpv/ffmpeg user agents on mobile devices.
-      await player.open(
+      await newPlayer.open(
         Media(
           widget.channel.url,
           httpHeaders: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
+            'Connection': 'keep-alive',
           },
         ),
         play: true,
       );
 
-      // Resume from saved progress if available (only for VOD)
+      newPlayer.setSubtitleTrack(SubtitleTrack.no());
+
       if (widget.channel.contentType != ContentType.live &&
           widget.channel.watchedMilliseconds > 0) {
-        await player.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
+        await newPlayer.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
       }
 
-      // Update play count
       await DatabaseService.updateChannelPlayCount(widget.channel);
-
-      // Start progress tracking timer for VOD content
-      if (widget.channel.contentType != ContentType.live) {
-        _startProgressTimer();
-      }
-
+      if (widget.channel.contentType != ContentType.live) _startProgressTimer();
       _hideControlsAfterDelay();
-    } catch (e, stackTrace) {
-      print('❌ Error initializing player: $e');
-      print('Stack trace: $stackTrace');
-      if (mounted) {
+    } catch (e) {
+      if (mounted && player == null) {
         setState(() {
           _error = l10n.failedToLoadStream(e.toString());
           _isLoading = false;
@@ -146,7 +231,7 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
     _progressTimer?.cancel();
     _controlsTimer?.cancel();
     _saveWatchProgress();
-    player.dispose();
+    player?.dispose();
     
     // Restore orientation
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -161,10 +246,10 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
   }
 
   Future<void> _saveWatchProgress() async {
-    if (widget.channel.contentType == ContentType.live) return;
+    if (player == null || widget.channel.contentType == ContentType.live) return;
 
-    final position = player.state.position;
-    final duration = player.state.duration;
+    final position = player!.state.position;
+    final duration = player!.state.duration;
 
     if (position != Duration.zero && duration != Duration.zero) {
       widget.channel.watchedMilliseconds = position.inMilliseconds;
@@ -200,9 +285,15 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // MediaKit Video Widget
+              // BACKGROUND LAYER (Preparing recovery)
+              if (_stagingController != null)
+                 Center(child: Video(controller: _stagingController!)),
+
+              // FOREGROUND LAYER (Current or stalled frame)
               Center(
-                child: Video(controller: controller),
+                child: controller != null 
+                  ? Video(controller: controller!)
+                  : const SizedBox.shrink(),
               ),
 
               if (_isLoading)
@@ -220,7 +311,7 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
                         child: Text(_error!, style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
                       ),
                       ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.of(context).pop(),
                         child: Text(l10n.backButton),
                       ),
                     ],
@@ -257,7 +348,7 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
                 Expanded(
                   child: Text(
@@ -289,11 +380,15 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.replay_10, color: Colors.white, size: 36),
-                      onPressed: () => player.seek(player.state.position - const Duration(seconds: 10)),
+                      onPressed: () {
+                        if (player != null) {
+                          player!.seek(player!.state.position - const Duration(seconds: 10));
+                        }
+                      },
                     ),
                     const SizedBox(width: 32),
-                    StreamBuilder<bool>(
-                      stream: player.stream.playing,
+                    if (player != null) StreamBuilder<bool>(
+                      stream: player!.stream.playing,
                       builder: (context, snapshot) {
                         final playing = snapshot.data ?? false;
                         return IconButton(
@@ -302,14 +397,18 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
                             color: Colors.white,
                             size: 64,
                           ),
-                          onPressed: () => player.playOrPause(),
+                          onPressed: () => player?.playOrPause(),
                         );
                       },
                     ),
                     const SizedBox(width: 32),
                     IconButton(
                       icon: const Icon(Icons.forward_10, color: Colors.white, size: 36),
-                      onPressed: () => player.seek(player.state.position + const Duration(seconds: 10)),
+                      onPressed: () {
+                        if (player != null) {
+                          player!.seek(player!.state.position + const Duration(seconds: 10));
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -322,11 +421,12 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
   }
 
   Widget _buildProgressBar() {
+    if (player == null) return const SizedBox.shrink();
     return StreamBuilder<Duration>(
-      stream: player.stream.position,
+      stream: player!.stream.position,
       builder: (context, snapshot) {
         final position = snapshot.data ?? Duration.zero;
-        final duration = player.state.duration;
+        final duration = player!.state.duration;
         final progress = duration.inMilliseconds > 0 
           ? position.inMilliseconds / duration.inMilliseconds 
           : 0.0;
@@ -338,8 +438,10 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
               activeColor: const Color(0xFF5DD3E5),
               inactiveColor: Colors.white24,
               onChanged: (val) {
-                final target = duration * val;
-                player.seek(target);
+                if (duration.inMilliseconds > 0) {
+                  final target = duration * val;
+                  player?.seek(target);
+                }
               },
             ),
             Padding(

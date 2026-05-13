@@ -25,14 +25,24 @@ class VideoPlayerScreen extends StatefulWidget {
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  final Player player = Player();
-  late final VideoController controller = VideoController(player);
+  Player? player;
+  VideoController? controller;
+  
+  // Seamless Recovery State
+  Player? _stagingPlayer;
+  VideoController? _stagingController;
+
   bool _isControlsVisible = true;
   bool _isLoading = true;
   String? _error;
   bool _isFullscreen = false;
   final FocusNode _focusNode = FocusNode();
   Timer? _hideControlsTimer;
+
+  // Watchdog for stall detection
+  DateTime? _lastPositionUpdateTime;
+  Duration? _lastPosition;
+  bool _isReconnecting = false;
 
   @override
   void initState() {
@@ -42,21 +52,133 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _initializePlayer() async {
     try {
-      await player.open(Media(widget.channel.url));
-      // Disable subtitles by default
-      player.setSubtitleTrack(SubtitleTrack.no());
+      // Create new player instance (Seamless background initialization)
+      final newPlayer = Player();
+      final newController = VideoController(newPlayer);
+      
+      if (player != null) {
+        setState(() {
+          _stagingPlayer = newPlayer;
+          _stagingController = newController;
+        });
+      }
 
-      // Resume from saved progress if available
-      if (widget.channel.watchedMilliseconds > 0) {
-        await player.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
+      // Configure player settings based on smarter algorithm
+      try {
+        final dynamic native = newPlayer.platform;
+        final String url = widget.channel.url.toLowerCase();
+
+        if (url.contains('.m3u8')) {
+          native.setProperty('demuxer-max-bytes', '67108864'); // 64MB
+          native.setProperty('cache-secs', '15');
+          native.setProperty('hls-bitrate', 'max');
+          native.setProperty('hls-reload-mode', 'all');
+        } else if (url.contains('.ts') || url.contains('/live/')) {
+          native.setProperty('demuxer-max-bytes', '201326592'); // 192MB
+          native.setProperty('cache-secs', '120');
+        } else if (widget.channel.contentType != ContentType.live) {
+          native.setProperty('demuxer-max-bytes', '268435456'); // 256MB
+          native.setProperty('cache-secs', '300');
+        } else {
+          native.setProperty('demuxer-max-bytes', '134217728'); // 128MB
+          native.setProperty('cache-secs', '60');
+        }
+
+        native.setProperty('demuxer-max-back-bytes', '67108864'); 
+        native.setProperty('cache', 'yes');
+        native.setProperty('http-reconnect', 'yes');
+        native.setProperty('live-auto-range', 'yes');
+        native.setProperty('demuxer-lavf-o', 'reconnect_at_eof=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=4xx,5xx,reconnect_delay_max=5');
+        native.setProperty('network-timeout', '60');
+        native.setProperty('framedrop', 'vo');
+        native.setProperty('vd-lavc-fast', 'yes');
+        native.setProperty('rtsp-transport', 'tcp');
+        native.setProperty('tls-verify', 'no');
+        native.setProperty('cookies', 'yes');
+      } catch (e) {
+        print('Warning: Could not set native properties: $e');
+      }
+
+      newPlayer.stream.playing.listen((playing) {
+        if (playing && mounted) {
+          if (player != null && player != newPlayer) {
+            Future.delayed(const Duration(milliseconds: 250), () {
+              if (!mounted) return;
+              final oldPlayer = player;
+              setState(() {
+                player = newPlayer;
+                controller = newController;
+                _stagingPlayer = null;
+                _stagingController = null;
+                _isLoading = false;
+                _isReconnecting = false;
+                _lastPosition = null;
+                _lastPositionUpdateTime = DateTime.now();
+              });
+              oldPlayer?.dispose();
+            });
+          } else if (player == null) {
+            setState(() {
+              player = newPlayer;
+              controller = newController;
+              _isLoading = false;
+              _isReconnecting = false;
+            });
+          }
+        }
+      });
+
+      newPlayer.stream.completed.listen((completed) {
+        if (completed && widget.channel.contentType == ContentType.live && mounted && !_isReconnecting) {
+           _isReconnecting = true;
+           _initializePlayer();
+        }
+      });
+
+      newPlayer.stream.error.listen((error) {
+        if (mounted && widget.channel.contentType == ContentType.live && !_isReconnecting) {
+          _isReconnecting = true;
+          _initializePlayer();
+        }
+      });
+
+      newPlayer.stream.position.listen((pos) {
+        if (!mounted || widget.channel.contentType != ContentType.live || player != newPlayer) return;
+        
+        if (_lastPosition != null && _lastPosition == pos) {
+          if (_lastPositionUpdateTime != null && 
+              DateTime.now().difference(_lastPositionUpdateTime!).inSeconds > 8 &&
+              !_isReconnecting && newPlayer.state.playing) {
+            print('⚠️ Seamless Recovery: Stall detected, using background buffer...');
+            _isReconnecting = true;
+            _initializePlayer();
+          }
+        } else {
+          _lastPosition = pos;
+          _lastPositionUpdateTime = DateTime.now();
+        }
+      });
+
+      await newPlayer.open(
+        Media(
+          widget.channel.url,
+          httpHeaders: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
+            'Connection': 'keep-alive',
+          },
+        ),
+        play: true,
+      );
+      
+      newPlayer.setSubtitleTrack(SubtitleTrack.no());
+
+      if (widget.channel.contentType != ContentType.live && widget.channel.watchedMilliseconds > 0) {
+        await newPlayer.seek(Duration(milliseconds: widget.channel.watchedMilliseconds));
       }
 
       await DatabaseService.updateChannelPlayCount(widget.channel);
-      setState(() {
-        _isLoading = false;
-      });
     } catch (e) {
-      if (mounted) {
+      if (mounted && player == null) {
         setState(() {
           _error = AppLocalizations.of(context).failedToLoadStream(e.toString());
           _isLoading = false;
@@ -64,7 +186,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
     }
 
-    // Auto-hide controls after 3 seconds
     _startHideControlsTimer();
   }
 
@@ -106,13 +227,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     // Save watch progress before disposing
     _saveWatchProgress();
 
-    player.dispose();
+    player?.dispose();
     super.dispose();
   }
 
   Future<void> _saveWatchProgress() async {
-    final duration = player.state.duration;
-    final position = player.state.position;
+    if (player == null) return;
+    final duration = player!.state.duration;
+    final position = player!.state.position;
 
     if (duration != null && position != null) {
       widget.channel.watchedMilliseconds = position.inMilliseconds;
@@ -124,37 +246,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return;
+    if (event is! KeyDownEvent || player == null) return;
 
     final key = event.logicalKey;
 
     // Space bar - Play/Pause
     if (key == LogicalKeyboardKey.space) {
-      player.playOrPause();
+      player!.playOrPause();
       _showControlsTemporarily();
     }
     // Left arrow - Rewind 10 seconds
     else if (key == LogicalKeyboardKey.arrowLeft) {
-      final currentPosition = player.state.position;
-      player.seek(currentPosition - const Duration(seconds: 10));
+      final currentPosition = player!.state.position;
+      player!.seek(currentPosition - const Duration(seconds: 10));
       _showControlsTemporarily();
     }
     // Right arrow - Forward 10 seconds
     else if (key == LogicalKeyboardKey.arrowRight) {
-      final currentPosition = player.state.position;
-      player.seek(currentPosition + const Duration(seconds: 10));
+      final currentPosition = player!.state.position;
+      player!.seek(currentPosition + const Duration(seconds: 10));
       _showControlsTemporarily();
     }
     // Up arrow - Volume up
     else if (key == LogicalKeyboardKey.arrowUp) {
-      final currentVolume = player.state.volume;
-      player.setVolume((currentVolume + 10).clamp(0, 100));
+      final currentVolume = player!.state.volume;
+      player!.setVolume((currentVolume + 10).clamp(0, 100));
       _showControlsTemporarily();
     }
     // Down arrow - Volume down
     else if (key == LogicalKeyboardKey.arrowDown) {
-      final currentVolume = player.state.volume;
-      player.setVolume((currentVolume - 10).clamp(0, 100));
+      final currentVolume = player!.state.volume;
+      player!.setVolume((currentVolume - 10).clamp(0, 100));
       _showControlsTemporarily();
     }
     // F or F11 - Toggle fullscreen
@@ -223,9 +345,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _showAudioTrackDialog() {
+    if (player == null) return;
     final l10n = AppLocalizations.of(context);
-    final audioTracks = player.state.tracks.audio;
-    final currentTrack = player.state.track.audio;
+    final audioTracks = player!.state.tracks.audio;
+    final currentTrack = player!.state.track.audio;
 
     if (audioTracks.isEmpty) {
       showDialog(
@@ -324,7 +447,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         )
                       : null,
                   onTap: () {
-                    player.setAudioTrack(track);
+                    player?.setAudioTrack(track);
                     Navigator.pop(context);
                   },
                 ),
@@ -353,9 +476,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _showSubtitleTrackDialog() {
+    if (player == null) return;
     final l10n = AppLocalizations.of(context);
-    final allSubtitleTracks = player.state.tracks.subtitle;
-    final currentTrack = player.state.track.subtitle;
+    final allSubtitleTracks = player!.state.tracks.subtitle;
+    final currentTrack = player!.state.track.subtitle;
 
     // Filter out 'no' and 'auto' tracks - we show 'Disabled' manually
     final subtitleTracks = allSubtitleTracks.where((t) =>
@@ -407,7 +531,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     ),
                   ),
                   onTap: () {
-                    player.setSubtitleTrack(SubtitleTrack.no());
+                    player?.setSubtitleTrack(SubtitleTrack.no());
                     Navigator.pop(context);
                   },
                 ),
@@ -451,7 +575,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                           )
                         : null,
                     onTap: () {
-                      player.setSubtitleTrack(track);
+                      player?.setSubtitleTrack(track);
                       Navigator.pop(context);
                     },
                   ),
@@ -519,7 +643,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             onTap: _isControlsVisible ? _toggleControls : _showControls,
             child: Stack(
             children: [
-              // Video Player
+               // BACKGROUND LAYER (Recovery Buffer)
+               if (_stagingController != null)
+                 SizedBox.expand(
+                    child: Video(
+                      controller: _stagingController!,
+                      controls: NoVideoControls,
+                    ),
+                  ),
+
+              // FOREGROUND LAYER (Main Video)
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _error != null
@@ -542,10 +675,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                           ),
                         )
                       : SizedBox.expand(
-                          child: Video(
-                            controller: controller,
+                          child: controller != null ? Video(
+                            controller: controller!,
                             controls: NoVideoControls,
-                          ),
+                          ) : const SizedBox.shrink(),
                         ),
 
               // Top Controls
@@ -617,8 +750,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       ),
                       const SizedBox(width: 16),
                       // Volume control
-                      StreamBuilder<double>(
-                        stream: player.stream.volume,
+                      if (player != null) StreamBuilder<double>(
+                        stream: player!.stream.volume,
                         builder: (context, snapshot) {
                           final volume = snapshot.data ?? 100.0;
                           final isMuted = volume == 0.0;
@@ -644,9 +777,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                   ),
                                   onPressed: () {
                                     if (isMuted) {
-                                      player.setVolume(100);
+                                      player?.setVolume(100);
                                     } else {
-                                      player.setVolume(0);
+                                      player?.setVolume(0);
                                     }
                                   },
                                 ),
@@ -667,7 +800,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                       min: 0,
                                       max: 100,
                                       onChanged: (value) {
-                                        player.setVolume(value);
+                                        player?.setVolume(value);
                                       },
                                       activeColor: Colors.white,
                                       inactiveColor: Colors.white.withOpacity(0.2),
@@ -790,8 +923,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                 icon: const Icon(Icons.replay_10,
                                     color: Colors.white, size: 26),
                                 onPressed: () {
-                                  final currentPosition = player.state.position;
-                                  player.seek(currentPosition - const Duration(seconds: 10));
+                                  if (player != null) {
+                                    final currentPosition = player!.state.position;
+                                    player!.seek(currentPosition - const Duration(seconds: 10));
+                                  }
                                 },
                               ),
                             ),
@@ -810,8 +945,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                               ),
                             ),
                             const SizedBox(width: 20),
-                            StreamBuilder<bool>(
-                              stream: player.stream.playing,
+                            if (player != null) StreamBuilder<bool>(
+                              stream: player!.stream.playing,
                               builder: (context, snapshot) {
                                 final isPlaying = snapshot.data ?? false;
                                 return Container(
@@ -826,7 +961,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                       size: 40,
                                     ),
                                     onPressed: () {
-                                      player.playOrPause();
+                                      player?.playOrPause();
                                     },
                                   ),
                                 );
@@ -856,8 +991,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                 icon: const Icon(Icons.forward_10,
                                     color: Colors.white, size: 26),
                                 onPressed: () {
-                                  final currentPosition = player.state.position;
-                                  player.seek(currentPosition + const Duration(seconds: 10));
+                                  if (player != null) {
+                                    final currentPosition = player!.state.position;
+                                    player!.seek(currentPosition + const Duration(seconds: 10));
+                                  }
                                 },
                               ),
                             ),
@@ -865,11 +1002,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         ),
                         const SizedBox(height: 24),
                         // Progress bar with time
-                        StreamBuilder<Duration>(
-                          stream: player.stream.position,
+                        if (player != null) StreamBuilder<Duration>(
+                          stream: player!.stream.position,
                           builder: (context, positionSnapshot) {
                             return StreamBuilder<Duration>(
-                              stream: player.stream.duration,
+                              stream: player!.stream.duration,
                               builder: (context, durationSnapshot) {
                                 final position = positionSnapshot.data ?? Duration.zero;
                                 final duration = durationSnapshot.data ?? Duration.zero;
@@ -896,7 +1033,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                           final newPosition = Duration(
                                             milliseconds: (value * duration.inMilliseconds).round(),
                                           );
-                                          player.seek(newPosition);
+                                          player?.seek(newPosition);
                                         },
                                         activeColor: const Color(0xFFE50914),
                                         inactiveColor: Colors.white.withOpacity(0.25),
