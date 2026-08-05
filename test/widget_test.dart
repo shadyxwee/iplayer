@@ -1,30 +1,45 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:riptv/main.dart';
+import 'package:riptv/services/m3u_parser.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('M3UParser Tests', () {
+    test('parseString correctly parses valid M3U file', () {
+      const m3uContent = '''
+#EXTM3U
+#EXTINF:-1 tvg-id="1" tvg-name="HBO" tvg-logo="http://logo.com/hbo.png" group-title="Movies",HBO HD
+http://stream.com/hbo.ts
+#EXTINF:-1 tvg-id="2" tvg-name="CNN" tvg-logo="http://logo.com/cnn.png" group-title="News",CNN International
+http://stream.com/cnn.ts
+''';
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final channels = M3UParser.parseString(m3uContent);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      expect(channels.length, equals(2));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+      expect(channels[0].name, equals('HBO HD'));
+      expect(channels[0].url, equals('http://stream.com/hbo.ts'));
+      expect(channels[0].group, equals('Movies'));
+      expect(channels[0].logo, equals('http://logo.com/hbo.png'));
+
+      expect(channels[1].name, equals('CNN International'));
+      expect(channels[1].url, equals('http://stream.com/cnn.ts'));
+      expect(channels[1].group, equals('News'));
+      expect(channels[1].logo, equals('http://logo.com/cnn.png'));
+    });
+
+    test('parseString ignores empty lines and invalid records', () {
+      const m3uContent = '''
+#EXTM3U
+
+#EXTINF:-1 tvg-id="3" group-title="Sports",Sky Sports
+http://stream.com/sky.ts
+
+#INVALID LINE
+''';
+
+      final channels = M3UParser.parseString(m3uContent);
+      expect(channels.length, equals(1));
+      expect(channels[0].name, equals('Sky Sports'));
+    });
   });
 }
