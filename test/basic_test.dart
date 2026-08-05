@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:riptv/main.dart';
 
 void main() {
   testWidgets('App basic initialization test', (WidgetTester tester) async {
