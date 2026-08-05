@@ -40,7 +40,7 @@ class ContentHeroBanner extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.black,
-                    Colors.black.withOpacity(0.8),
+                    Colors.black.withValues(alpha: 0.8),
                     Colors.transparent,
                   ],
                   stops: const [0.0, 0.5, 1.0],
@@ -65,7 +65,7 @@ class ContentHeroBanner extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  theme.backgroundPrimary.withOpacity(0.8),
+                  theme.backgroundPrimary.withValues(alpha: 0.8),
                   theme.backgroundPrimary,
                 ],
                 stops: const [0.3, 0.8, 1.0],
@@ -249,7 +249,7 @@ class SectionHeader extends StatelessWidget {
           const Spacer(),
           if (onTrailingTap != null)
             IconButton(
-              icon: Icon(Icons.arrow_forward_ios_rounded, color: theme.textSecondary.withOpacity(0.5), size: 16),
+              icon: Icon(Icons.arrow_forward_ios_rounded, color: theme.textSecondary.withValues(alpha: 0.5), size: 16),
               onPressed: onTrailingTap,
             ),
         ],
@@ -294,12 +294,12 @@ class _ContentGridCardState extends State<ContentGridCard> {
           color: theme.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isFocused ? theme.accentPrimary : Colors.white.withOpacity(0.05),
+            color: _isFocused ? theme.accentPrimary : Colors.white.withValues(alpha: 0.05),
             width: _isFocused ? 2 : 1,
           ),
           boxShadow: _isFocused ? [
             BoxShadow(
-              color: theme.accentPrimary.withOpacity(0.3),
+              color: theme.accentPrimary.withValues(alpha: 0.3),
               blurRadius: 12,
               spreadRadius: 2,
             )
@@ -352,7 +352,7 @@ class _ContentGridCardState extends State<ContentGridCard> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.7),
+                                color: Colors.black.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Row(
@@ -390,7 +390,7 @@ class _ContentGridCardState extends State<ContentGridCard> {
                         Text(
                           widget.channel.group ?? '',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 10,
                           ),
                           maxLines: 1,
@@ -412,7 +412,7 @@ class _ContentGridCardState extends State<ContentGridCard> {
     return Container(
       color: theme.backgroundTertiary,
       child: Center(
-        child: Icon(Icons.movie_rounded, color: Colors.white.withOpacity(0.1), size: 40),
+        child: Icon(Icons.movie_rounded, color: Colors.white.withValues(alpha: 0.1), size: 40),
       ),
     );
   }

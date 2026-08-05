@@ -367,7 +367,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           content: Text(
             l10n.noAudioTracks,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 15,
             ),
           ),
@@ -419,7 +419,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 margin: const EdgeInsets.only(bottom: 4),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? const Color(0xFFE50914).withOpacity(0.2)
+                      ? const Color(0xFFE50914).withValues(alpha: 0.2)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(4),
                 ),
@@ -432,7 +432,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   title: Text(
                     trackName,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                      color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       fontSize: 15,
                     ),
@@ -441,7 +441,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       ? Text(
                           track.language!,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 13,
                           ),
                         )
@@ -512,7 +512,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 margin: const EdgeInsets.only(bottom: 4),
                 decoration: BoxDecoration(
                   color: isDisabled
-                      ? const Color(0xFFE50914).withOpacity(0.2)
+                      ? const Color(0xFFE50914).withValues(alpha: 0.2)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(4),
                 ),
@@ -525,7 +525,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   title: Text(
                     l10n.disabled,
                     style: TextStyle(
-                      color: isDisabled ? Colors.white : Colors.white.withOpacity(0.9),
+                      color: isDisabled ? Colors.white : Colors.white.withValues(alpha: 0.9),
                       fontWeight: isDisabled ? FontWeight.w600 : FontWeight.normal,
                       fontSize: 15,
                     ),
@@ -547,7 +547,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   margin: const EdgeInsets.only(bottom: 4),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? const Color(0xFFE50914).withOpacity(0.2)
+                        ? const Color(0xFFE50914).withValues(alpha: 0.2)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(4),
                   ),
@@ -560,7 +560,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     title: Text(
                       trackName,
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.white.withOpacity(0.9),
+                        color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                         fontSize: 15,
                       ),
@@ -569,7 +569,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         ? Text(
                             track.language!,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               fontSize: 13,
                             ),
                           )
@@ -587,7 +587,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   child: Text(
                     l10n.noSubtitles,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
+                      color: Colors.white.withValues(alpha: 0.5),
                       fontSize: 14,
                     ),
                   ),
@@ -698,8 +698,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withOpacity(0.8),
-                      Colors.black.withOpacity(0.4),
+                      Colors.black.withValues(alpha: 0.8),
+                      Colors.black.withValues(alpha: 0.4),
                       Colors.transparent,
                     ],
                   ),
@@ -709,7 +709,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(
@@ -740,7 +740,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                               Text(
                                 widget.channel.group!,
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
+                                  color: Colors.white.withValues(alpha: 0.6),
                                   fontSize: 13,
                                   letterSpacing: 0.2,
                                 ),
@@ -759,7 +759,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.3),
+                              color: Colors.black.withValues(alpha: 0.3),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -803,7 +803,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                         player?.setVolume(value);
                                       },
                                       activeColor: Colors.white,
-                                      inactiveColor: Colors.white.withOpacity(0.2),
+                                      inactiveColor: Colors.white.withValues(alpha: 0.2),
                                     ),
                                   ),
                                 ),
@@ -816,7 +816,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       // Audio track button
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(
@@ -829,7 +829,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       // Subtitle button
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(
@@ -842,8 +842,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       Container(
                         decoration: BoxDecoration(
                           color: widget.channel.isFavorite
-                              ? const Color(0xFFE50914).withOpacity(0.3)
-                              : Colors.black.withOpacity(0.3),
+                              ? const Color(0xFFE50914).withValues(alpha: 0.3)
+                              : Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(
@@ -862,7 +862,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       const SizedBox(width: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: IconButton(
@@ -900,8 +900,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: [
-                        Colors.black.withOpacity(0.8),
-                        Colors.black.withOpacity(0.4),
+                        Colors.black.withValues(alpha: 0.8),
+                        Colors.black.withValues(alpha: 0.4),
                         Colors.transparent,
                       ],
                     ),
@@ -916,7 +916,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                           children: [
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: IconButton(
@@ -933,7 +933,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             const SizedBox(width: 20),
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: IconButton(
@@ -951,7 +951,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                 final isPlaying = snapshot.data ?? false;
                                 return Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.95),
+                                    color: Colors.white.withValues(alpha: 0.95),
                                     shape: BoxShape.circle,
                                   ),
                                   child: IconButton(
@@ -970,7 +970,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             const SizedBox(width: 20),
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: IconButton(
@@ -984,7 +984,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             const SizedBox(width: 20),
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: IconButton(
@@ -1036,7 +1036,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                           player?.seek(newPosition);
                                         },
                                         activeColor: const Color(0xFFE50914),
-                                        inactiveColor: Colors.white.withOpacity(0.25),
+                                        inactiveColor: Colors.white.withValues(alpha: 0.25),
                                       ),
                                     ),
                                     // Time labels
@@ -1048,7 +1048,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                           Text(
                                             _formatDuration(position),
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.9),
+                                              color: Colors.white.withValues(alpha: 0.9),
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500,
                                             ),
@@ -1056,7 +1056,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                           Text(
                                             _formatDuration(duration),
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.9),
+                                              color: Colors.white.withValues(alpha: 0.9),
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500,
                                             ),
