@@ -162,7 +162,14 @@ class XtreamService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List;
+        final decoded = jsonDecode(response.body);
+        if (decoded is! List) {
+          return {
+            'success': false,
+            'message': 'Unexpected API response format: expected list but got ${decoded.runtimeType}',
+          };
+        }
+        final data = decoded;
 
         // Parse channels
         final channels = <Channel>[];
@@ -231,7 +238,14 @@ class XtreamService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List;
+        final decoded = jsonDecode(response.body);
+        if (decoded is! List) {
+          return {
+            'success': false,
+            'message': 'Unexpected API response format: expected list but got ${decoded.runtimeType}',
+          };
+        }
+        final data = decoded;
 
         final movies = <VodItem>[];
 
@@ -283,7 +297,14 @@ class XtreamService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List;
+        final decoded = jsonDecode(response.body);
+        if (decoded is! List) {
+          return {
+            'success': false,
+            'message': 'Unexpected API response format: expected list but got ${decoded.runtimeType}',
+          };
+        }
+        final data = decoded;
 
         final seriesList = <SeriesItem>[];
 
