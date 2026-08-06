@@ -135,8 +135,7 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
       newPlayer.stream.error.listen((error) {
         if (mounted && !_isReconnecting) {
           if (widget.channel.contentType == ContentType.live) {
-             _isReconnecting = true;
-             _initializePlayer();
+             print('❌ Stream error event received in MobileVideoPlayer: $error. Letting native reconnect options and position watchdog handle background recovery.');
           } else {
             setState(() {
               _error = l10n.failedToLoadStream(error.toString());
@@ -149,8 +148,7 @@ class _MobileVideoPlayerScreenState extends State<MobileVideoPlayerScreen> {
       newPlayer.stream.completed.listen((completed) {
         if (completed && mounted && !_isReconnecting) {
           if (widget.channel.contentType == ContentType.live) {
-            _isReconnecting = true;
-            _initializePlayer(); 
+            print('ℹ️ Stream completed event received in MobileVideoPlayer. Suppressing immediate hard reload to let native reconnect and position watchdog handle segment EOF transitions.');
           } else {
             Navigator.of(context).pop();
           }

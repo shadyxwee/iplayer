@@ -244,7 +244,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
     newPlayer.stream.completed.listen((completed) {
       if (completed && mounted && !_isReconnecting) {
-        _triggerRecovery();
+        print('ℹ️ Stream completed event received. Suppressing immediate hard reload to let native reconnect and watchdog handle segment EOF transitions.');
       }
     });
 
@@ -256,8 +256,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           return;
         }
 
-        print('❌ Fatal Stream failure: $error');
-        _triggerRecovery();
+        print('❌ Stream error event received: $error. Letting native reconnect options and stall watchdog handle background recovery.');
       }
     });
 
