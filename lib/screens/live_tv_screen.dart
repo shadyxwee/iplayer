@@ -196,6 +196,8 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
       native.setProperty('demuxer-max-back-bytes', '0'); // NO BACK BYTES (Prevents rewind loops)
       native.setProperty('cache', 'yes');
+      native.setProperty('cache-pause', 'yes'); // Forces smooth buffering like VLC network-caching
+      native.setProperty('demuxer-readahead-secs', '15'); // Pre-reads 15 seconds of streaming data
       native.setProperty('http-reconnect', 'yes');
       native.setProperty('live-auto-range', 'yes');
       native.setProperty('demuxer-lavf-o', 'reconnect_at_eof=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=4xx,5xx,reconnect_delay_max=2');
