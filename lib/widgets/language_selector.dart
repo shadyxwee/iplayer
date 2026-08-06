@@ -35,10 +35,10 @@ class LanguageSelector extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? theme.accentPrimary.withOpacity(0.1) : Colors.transparent,
+        color: isSelected ? theme.accentPrimary.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isSelected ? theme.accentPrimary.withOpacity(0.3) : Colors.transparent,
+          color: isSelected ? theme.accentPrimary.withValues(alpha: 0.3) : Colors.transparent,
         ),
       ),
       child: ListTile(
