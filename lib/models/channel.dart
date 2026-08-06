@@ -21,8 +21,10 @@ class Channel {
   String? tvgName;
   String? tvgLogo;
   String? groupTitle;
+  @Index()
   bool isFavorite = false;
   int playCount = 0;
+  @Index()
   DateTime? lastPlayed;
   double rating = 0.0; // TMDB rating (0-10), 0 means not set
   String? description; // Movie/Series description or plot
@@ -30,6 +32,7 @@ class Channel {
   int totalMilliseconds = 0; // Total duration in milliseconds
 
   // Playlist association
+  @Index()
   int? playlistId; // ID of the playlist this channel belongs to
 
   // Content type: 'live', 'movie', 'series'

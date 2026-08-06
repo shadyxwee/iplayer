@@ -54,7 +54,12 @@ class DatabaseService {
   }
 
   static Future<void> addChannels(List<Channel> channels) async {
-    await isar.writeTxn(() => isar.collection<Channel>().putAll(channels));
+    const int batchSize = 1000;
+    for (int i = 0; i < channels.length; i += batchSize) {
+      final end = (i + batchSize < channels.length) ? i + batchSize : channels.length;
+      final batch = channels.sublist(i, end);
+      await isar.writeTxn(() => isar.collection<Channel>().putAll(batch));
+    }
   }
 
   static Future<void> toggleFavorite(Channel channel) async {

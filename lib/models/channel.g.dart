@@ -58,48 +58,53 @@ const ChannelSchema = CollectionSchema(
       name: r'name',
       type: IsarType.string,
     ),
-    r'playCount': PropertySchema(
+    r'number': PropertySchema(
       id: 8,
+      name: r'number',
+      type: IsarType.long,
+    ),
+    r'playCount': PropertySchema(
+      id: 9,
       name: r'playCount',
       type: IsarType.long,
     ),
     r'playlistId': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'playlistId',
       type: IsarType.long,
     ),
     r'rating': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'rating',
       type: IsarType.double,
     ),
     r'totalMilliseconds': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'totalMilliseconds',
       type: IsarType.long,
     ),
     r'tvgId': PropertySchema(
-      id: 12,
+      id: 13,
       name: r'tvgId',
       type: IsarType.long,
     ),
     r'tvgLogo': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'tvgLogo',
       type: IsarType.string,
     ),
     r'tvgName': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'tvgName',
       type: IsarType.string,
     ),
     r'url': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'url',
       type: IsarType.string,
     ),
     r'watchedMilliseconds': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'watchedMilliseconds',
       type: IsarType.long,
     )
@@ -109,7 +114,47 @@ const ChannelSchema = CollectionSchema(
   deserialize: _channelDeserialize,
   deserializeProp: _channelDeserializeProp,
   idName: r'id',
-  indexes: {},
+  indexes: {
+    r'isFavorite': IndexSchema(
+      id: 5742774614603939776,
+      name: r'isFavorite',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'isFavorite',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'lastPlayed': IndexSchema(
+      id: -8420677377986255979,
+      name: r'lastPlayed',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'lastPlayed',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    ),
+    r'playlistId': IndexSchema(
+      id: 7921918076105486368,
+      name: r'playlistId',
+      unique: false,
+      replace: false,
+      properties: [
+        IndexPropertySchema(
+          name: r'playlistId',
+          type: IndexType.value,
+          caseSensitive: false,
+        )
+      ],
+    )
+  },
   links: {},
   embeddedSchemas: {},
   getId: _channelGetId,
@@ -179,15 +224,16 @@ void _channelSerialize(
   writer.writeDateTime(offsets[5], object.lastPlayed);
   writer.writeString(offsets[6], object.logo);
   writer.writeString(offsets[7], object.name);
-  writer.writeLong(offsets[8], object.playCount);
-  writer.writeLong(offsets[9], object.playlistId);
-  writer.writeDouble(offsets[10], object.rating);
-  writer.writeLong(offsets[11], object.totalMilliseconds);
-  writer.writeLong(offsets[12], object.tvgId);
-  writer.writeString(offsets[13], object.tvgLogo);
-  writer.writeString(offsets[14], object.tvgName);
-  writer.writeString(offsets[15], object.url);
-  writer.writeLong(offsets[16], object.watchedMilliseconds);
+  writer.writeLong(offsets[8], object.number);
+  writer.writeLong(offsets[9], object.playCount);
+  writer.writeLong(offsets[10], object.playlistId);
+  writer.writeDouble(offsets[11], object.rating);
+  writer.writeLong(offsets[12], object.totalMilliseconds);
+  writer.writeLong(offsets[13], object.tvgId);
+  writer.writeString(offsets[14], object.tvgLogo);
+  writer.writeString(offsets[15], object.tvgName);
+  writer.writeString(offsets[16], object.url);
+  writer.writeLong(offsets[17], object.watchedMilliseconds);
 }
 
 Channel _channelDeserialize(
@@ -208,15 +254,16 @@ Channel _channelDeserialize(
   object.lastPlayed = reader.readDateTimeOrNull(offsets[5]);
   object.logo = reader.readStringOrNull(offsets[6]);
   object.name = reader.readString(offsets[7]);
-  object.playCount = reader.readLong(offsets[8]);
-  object.playlistId = reader.readLongOrNull(offsets[9]);
-  object.rating = reader.readDouble(offsets[10]);
-  object.totalMilliseconds = reader.readLong(offsets[11]);
-  object.tvgId = reader.readLongOrNull(offsets[12]);
-  object.tvgLogo = reader.readStringOrNull(offsets[13]);
-  object.tvgName = reader.readStringOrNull(offsets[14]);
-  object.url = reader.readString(offsets[15]);
-  object.watchedMilliseconds = reader.readLong(offsets[16]);
+  object.number = reader.readLongOrNull(offsets[8]);
+  object.playCount = reader.readLong(offsets[9]);
+  object.playlistId = reader.readLongOrNull(offsets[10]);
+  object.rating = reader.readDouble(offsets[11]);
+  object.totalMilliseconds = reader.readLong(offsets[12]);
+  object.tvgId = reader.readLongOrNull(offsets[13]);
+  object.tvgLogo = reader.readStringOrNull(offsets[14]);
+  object.tvgName = reader.readStringOrNull(offsets[15]);
+  object.url = reader.readString(offsets[16]);
+  object.watchedMilliseconds = reader.readLong(offsets[17]);
   return object;
 }
 
@@ -245,22 +292,24 @@ P _channelDeserializeProp<P>(
     case 7:
       return (reader.readString(offset)) as P;
     case 8:
-      return (reader.readLong(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 9:
-      return (reader.readLongOrNull(offset)) as P;
-    case 10:
-      return (reader.readDouble(offset)) as P;
-    case 11:
       return (reader.readLong(offset)) as P;
-    case 12:
+    case 10:
       return (reader.readLongOrNull(offset)) as P;
+    case 11:
+      return (reader.readDouble(offset)) as P;
+    case 12:
+      return (reader.readLong(offset)) as P;
     case 13:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 14:
       return (reader.readStringOrNull(offset)) as P;
     case 15:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 16:
+      return (reader.readString(offset)) as P;
+    case 17:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -294,6 +343,30 @@ extension ChannelQueryWhereSort on QueryBuilder<Channel, Channel, QWhere> {
   QueryBuilder<Channel, Channel, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhere> anyIsFavorite() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'isFavorite'),
+      );
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhere> anyLastPlayed() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'lastPlayed'),
+      );
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhere> anyPlaylistId() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(
+        const IndexWhereClause.any(indexName: r'playlistId'),
+      );
     });
   }
 }
@@ -359,6 +432,271 @@ extension ChannelQueryWhere on QueryBuilder<Channel, Channel, QWhereClause> {
         lower: lowerId,
         includeLower: includeLower,
         upper: upperId,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> isFavoriteEqualTo(
+      bool isFavorite) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'isFavorite',
+        value: [isFavorite],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> isFavoriteNotEqualTo(
+      bool isFavorite) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isFavorite',
+              lower: [],
+              upper: [isFavorite],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isFavorite',
+              lower: [isFavorite],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isFavorite',
+              lower: [isFavorite],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'isFavorite',
+              lower: [],
+              upper: [isFavorite],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'lastPlayed',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastPlayed',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedEqualTo(
+      DateTime? lastPlayed) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'lastPlayed',
+        value: [lastPlayed],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedNotEqualTo(
+      DateTime? lastPlayed) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastPlayed',
+              lower: [],
+              upper: [lastPlayed],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastPlayed',
+              lower: [lastPlayed],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastPlayed',
+              lower: [lastPlayed],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'lastPlayed',
+              lower: [],
+              upper: [lastPlayed],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedGreaterThan(
+    DateTime? lastPlayed, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastPlayed',
+        lower: [lastPlayed],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedLessThan(
+    DateTime? lastPlayed, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastPlayed',
+        lower: [],
+        upper: [lastPlayed],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> lastPlayedBetween(
+    DateTime? lowerLastPlayed,
+    DateTime? upperLastPlayed, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'lastPlayed',
+        lower: [lowerLastPlayed],
+        includeLower: includeLower,
+        upper: [upperLastPlayed],
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'playlistId',
+        value: [null],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'playlistId',
+        lower: [null],
+        includeLower: false,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdEqualTo(
+      int? playlistId) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.equalTo(
+        indexName: r'playlistId',
+        value: [playlistId],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdNotEqualTo(
+      int? playlistId) {
+    return QueryBuilder.apply(this, (query) {
+      if (query.whereSort == Sort.asc) {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'playlistId',
+              lower: [],
+              upper: [playlistId],
+              includeUpper: false,
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'playlistId',
+              lower: [playlistId],
+              includeLower: false,
+              upper: [],
+            ));
+      } else {
+        return query
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'playlistId',
+              lower: [playlistId],
+              includeLower: false,
+              upper: [],
+            ))
+            .addWhereClause(IndexWhereClause.between(
+              indexName: r'playlistId',
+              lower: [],
+              upper: [playlistId],
+              includeUpper: false,
+            ));
+      }
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdGreaterThan(
+    int? playlistId, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'playlistId',
+        lower: [playlistId],
+        includeLower: include,
+        upper: [],
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdLessThan(
+    int? playlistId, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'playlistId',
+        lower: [],
+        upper: [playlistId],
+        includeUpper: include,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterWhereClause> playlistIdBetween(
+    int? lowerPlaylistId,
+    int? upperPlaylistId, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addWhereClause(IndexWhereClause.between(
+        indexName: r'playlistId',
+        lower: [lowerPlaylistId],
+        includeLower: includeLower,
+        upper: [upperPlaylistId],
         includeUpper: includeUpper,
       ));
     });
@@ -1266,6 +1604,75 @@ extension ChannelQueryFilter
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'number',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'number',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberEqualTo(
+      int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'number',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberGreaterThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'number',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'number',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> numberBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'number',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterFilterCondition> playCountEqualTo(
       int value) {
     return QueryBuilder.apply(this, (query) {
@@ -2157,6 +2564,18 @@ extension ChannelQuerySortBy on QueryBuilder<Channel, Channel, QSortBy> {
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'number', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'number', Sort.desc);
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterSortBy> sortByPlayCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'playCount', Sort.asc);
@@ -2376,6 +2795,18 @@ extension ChannelQuerySortThenBy
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'number', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByNumberDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'number', Sort.desc);
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterSortBy> thenByPlayCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'playCount', Sort.asc);
@@ -2540,6 +2971,12 @@ extension ChannelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Channel, Channel, QDistinct> distinctByNumber() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'number');
+    });
+  }
+
   QueryBuilder<Channel, Channel, QDistinct> distinctByPlayCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'playCount');
@@ -2651,6 +3088,12 @@ extension ChannelQueryProperty
   QueryBuilder<Channel, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
+    });
+  }
+
+  QueryBuilder<Channel, int?, QQueryOperations> numberProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'number');
     });
   }
 
