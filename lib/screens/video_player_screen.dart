@@ -132,15 +132,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
       newPlayer.stream.completed.listen((completed) {
         if (completed && widget.channel.contentType == ContentType.live && mounted && !_isReconnecting) {
-           _isReconnecting = true;
-           _initializePlayer();
+           print('ℹ️ Stream completed event received in VideoPlayer. Suppressing immediate hard reload to let native reconnect and position watchdog handle segment EOF transitions.');
         }
       });
 
       newPlayer.stream.error.listen((error) {
         if (mounted && widget.channel.contentType == ContentType.live && !_isReconnecting) {
-          _isReconnecting = true;
-          _initializePlayer();
+          print('❌ Stream error event received in VideoPlayer: $error. Letting native reconnect options and position watchdog handle background recovery.');
         }
       });
 
