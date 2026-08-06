@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import '../models/channel.dart';
 
@@ -10,9 +11,13 @@ class M3UParser {
     );
     if (response.statusCode == 200) {
       final content = utf8.decode(response.bodyBytes);
-      return parseString(content);
+      return parseStringAsync(content);
     }
     throw Exception('Failed to load M3U');
+  }
+
+  static Future<List<Channel>> parseStringAsync(String content) async {
+    return await compute(parseString, content);
   }
 
   static List<Channel> parseString(String content) {

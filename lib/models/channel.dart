@@ -21,8 +21,10 @@ class Channel {
   String? tvgName;
   String? tvgLogo;
   String? groupTitle;
+  @Index()
   bool isFavorite = false;
   int playCount = 0;
+  @Index()
   DateTime? lastPlayed;
   double rating = 0.0; // TMDB rating (0-10), 0 means not set
   String? description; // Movie/Series description or plot
@@ -30,6 +32,7 @@ class Channel {
   int totalMilliseconds = 0; // Total duration in milliseconds
 
   // Playlist association
+  @Index()
   int? playlistId; // ID of the playlist this channel belongs to
 
   // Content type: 'live', 'movie', 'series'
@@ -131,6 +134,15 @@ class Channel {
     contentType = ContentType.live;
   }
 
+  static String? _parseM3uAttribute(String line, String key) {
+    final match = RegExp(
+      '$key\\s*=\\s*(?:"([^"]*)"|\x27([^\x27]*)\x27|([^\\s,]+))',
+      caseSensitive: false,
+    ).firstMatch(line);
+    if (match == null) return null;
+    return match.group(1) ?? match.group(2) ?? match.group(3);
+  }
+
   factory Channel.fromM3U(String line, String url) {
     final channel = Channel();
     channel.url = url.trim();
@@ -140,25 +152,19 @@ class Channel {
     final nameMatch = RegExp(r',(.+)$').firstMatch(line);
     channel.name = nameMatch?.group(1)?.trim() ?? 'Unknown Channel';
 
-    // Parse attributes
-    final tvgIdMatch = RegExp(r'tvg-id="([^"]*)"').firstMatch(line);
-    final tvgIdStr = tvgIdMatch?.group(1);
+    // Parse attributes robustly using the universal parser
+    final tvgIdStr = _parseM3uAttribute(line, 'tvg-id');
     if (tvgIdStr != null && tvgIdStr.isNotEmpty) {
       channel.tvgId = int.tryParse(tvgIdStr);
       channel.number = channel.tvgId;
     }
 
-    final tvgNameMatch = RegExp(r'tvg-name="([^"]*)"').firstMatch(line);
-    if (tvgNameMatch != null) {
-      channel.tvgName = tvgNameMatch.group(1);
-    }
+    channel.tvgName = _parseM3uAttribute(line, 'tvg-name');
 
-    final tvgLogoMatch = RegExp(r'tvg-logo="([^"]*)"').firstMatch(line);
-    channel.logo = tvgLogoMatch?.group(1);
+    channel.logo = _parseM3uAttribute(line, 'tvg-logo');
     channel.tvgLogo = channel.logo;
 
-    final groupMatch = RegExp(r'group-title="([^"]*)"').firstMatch(line);
-    channel.group = groupMatch?.group(1);
+    channel.group = _parseM3uAttribute(line, 'group-title');
     channel.groupTitle = channel.group;
 
     // Auto-detect content type
