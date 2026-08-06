@@ -36,4 +36,16 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_omdbApiKey, apiKey);
   }
+
+  static const String _parentalPinKey = 'parental_pin';
+
+  static Future<String> getParentalPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_parentalPinKey) ?? '1234'; // Default to 1234
+  }
+
+  static Future<void> setParentalPin(String pin) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_parentalPinKey, pin);
+  }
 }

@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../services/config_service.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/theme_provider.dart';
+import '../services/preferences_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -133,6 +134,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
                 theme: theme,
               ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: theme.backgroundTertiary, borderRadius: BorderRadius.circular(12)),
+                  child: Icon(Icons.vpn_key_rounded, color: theme.textSecondary, size: 20),
+                ),
+                title: const Text('Change Parental PIN', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                trailing: Icon(Icons.arrow_forward_ios_rounded, color: theme.accentPrimary, size: 16),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                onTap: () => _changeParentalPin(theme),
+              ),
             ]),
             const SizedBox(height: 32),
 
@@ -141,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
                   child: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 22),
                 ),
                 title: Text(l10n.clearAllData, style: TextStyle(color: theme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
@@ -171,7 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          color: theme.textSecondary.withOpacity(0.5),
+          color: theme.textSecondary.withValues(alpha: 0.5),
           fontSize: 12,
           fontWeight: FontWeight.w900,
           letterSpacing: 2.0,
@@ -186,7 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: theme.backgroundSecondary,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.borderPrimary.withOpacity(0.5)),
+        border: Border.all(color: theme.borderPrimary.withValues(alpha: 0.5)),
       ),
       child: GridView.builder(
         shrinkWrap: true,
@@ -214,7 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   width: isSelected ? 2 : 1,
                 ),
                 boxShadow: isSelected ? [
-                  BoxShadow(color: theme.accentPrimary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))
+                  BoxShadow(color: theme.accentPrimary.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))
                 ] : null,
               ),
               child: Stack(
@@ -256,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: theme.backgroundSecondary,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.borderPrimary.withOpacity(0.5)),
+        border: Border.all(color: theme.borderPrimary.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,7 +278,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: theme.accentPrimary.withOpacity(0.12),
+                  color: theme.accentPrimary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(Icons.auto_awesome_rounded, color: theme.accentPrimary, size: 20),
@@ -280,7 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               TextButton(
                 onPressed: _resetApiKeys,
                 style: TextButton.styleFrom(
-                  backgroundColor: theme.accentPrimary.withOpacity(0.1),
+                  backgroundColor: theme.accentPrimary.withValues(alpha: 0.1),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text('Reset', style: TextStyle(color: theme.accentPrimary, fontSize: 13, fontWeight: FontWeight.w800)),
@@ -346,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Text(
           label,
-          style: TextStyle(color: theme.textSecondary.withOpacity(0.5), fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+          style: TextStyle(color: theme.textSecondary.withValues(alpha: 0.5), fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5),
         ),
         const SizedBox(height: 10),
         TextField(
@@ -355,12 +367,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(color: theme.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: theme.textSecondary.withOpacity(0.3)),
+            hintStyle: TextStyle(color: theme.textSecondary.withValues(alpha: 0.3)),
             filled: true,
             fillColor: theme.backgroundTertiary,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: theme.borderPrimary.withOpacity(0.3))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: theme.accentPrimary.withOpacity(0.5))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: theme.borderPrimary.withValues(alpha: 0.3))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: theme.accentPrimary.withValues(alpha: 0.5))),
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             suffixIcon: IconButton(
               icon: Icon(
@@ -381,7 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: theme.backgroundSecondary,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.borderPrimary.withOpacity(0.5)),
+        border: Border.all(color: theme.borderPrimary.withValues(alpha: 0.5)),
       ),
       child: Column(children: children),
     );
@@ -398,7 +410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: theme.accentPrimary.withOpacity(0.12),
+          color: theme.accentPrimary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -457,7 +469,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Icon(icon, color: theme.textSecondary, size: 20),
       ),
       title: Text(title, style: TextStyle(color: theme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
-      trailing: Text(value, style: TextStyle(color: theme.accentPrimary.withOpacity(0.8), fontSize: 14, fontWeight: FontWeight.w900)),
+      trailing: Text(value, style: TextStyle(color: theme.accentPrimary.withValues(alpha: 0.8), fontSize: 14, fontWeight: FontWeight.w900)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
     );
   }
@@ -496,6 +508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _showPinDialog(AppThemeType theme) async {
      final l10n = AppLocalizations.of(context);
+     final currentPin = await PreferencesService.getParentalPin();
      final pin = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -512,7 +525,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: TextStyle(color: theme.textPrimary),
             decoration: InputDecoration(
               hintText: l10n.enter4DigitPin, 
-              hintStyle: TextStyle(color: theme.textSecondary.withOpacity(0.5)),
+              hintStyle: TextStyle(color: theme.textSecondary.withValues(alpha: 0.5)),
               enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.borderPrimary)),
               focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.accentPrimary)),
             ),
@@ -528,7 +541,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
-    if (pin == '1234') setState(() => _showAdultContent = true);
+    if (pin == currentPin) {
+      setState(() => _showAdultContent = true);
+    } else if (pin != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.incorrectPin)));
+    }
+  }
+
+  Future<void> _changeParentalPin(AppThemeType theme) async {
+    final l10n = AppLocalizations.of(context);
+    final currentPin = await PreferencesService.getParentalPin();
+
+    // First, verify current PIN
+    final currentInput = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          backgroundColor: theme.backgroundSecondary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Verify Current PIN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            obscureText: true,
+            style: TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Enter current PIN',
+              hintStyle: TextStyle(color: theme.textSecondary.withValues(alpha: 0.5)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.borderPrimary)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.accentPrimary)),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel, style: TextStyle(color: theme.textSecondary))),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              style: ElevatedButton.styleFrom(backgroundColor: theme.accentPrimary, foregroundColor: Colors.black),
+              child: Text(l10n.ok, style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (currentInput != currentPin) {
+      if (currentInput != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.incorrectPin)));
+      }
+      return;
+    }
+
+    // Now, enter new PIN
+    final newPin = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          backgroundColor: theme.backgroundSecondary,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text('Set New PIN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            obscureText: true,
+            style: TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Enter new 4-digit PIN',
+              hintStyle: TextStyle(color: theme.textSecondary.withValues(alpha: 0.5)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.borderPrimary)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: theme.accentPrimary)),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel, style: TextStyle(color: theme.textSecondary))),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              style: ElevatedButton.styleFrom(backgroundColor: theme.accentPrimary, foregroundColor: Colors.black),
+              child: Text(l10n.save, style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newPin != null && newPin.length == 4) {
+      await PreferencesService.setParentalPin(newPin);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parental Control PIN changed successfully')));
+      }
+    } else if (newPin != null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PIN must be exactly 4 digits')));
+      }
+    }
   }
 
   Future<void> _showClearDataDialog(AppThemeType theme) async {
