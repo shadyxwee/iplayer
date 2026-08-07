@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:isar/isar.dart';
 import '../models/epg.dart';
@@ -258,10 +259,39 @@ class EpgService {
     }
   }
 
-  // Parse XMLTV format
+  // Parse XMLTV format asynchronously in a background isolate
   static Future<void> parseXmltvEpg(String xmlContent) async {
-    final channels = <EpgChannel>[];
-    final programs = <EpgProgram>[];
+    final Map<String, dynamic> result = await compute(_parseXmltvEpgBackground, xmlContent);
+
+    final List<Map<String, String?>> channelsData = List<Map<String, String?>>.from(result['channels']);
+    final List<Map<String, dynamic>> programsData = List<Map<String, dynamic>>.from(result['programs']);
+
+    final channels = channelsData.map((data) => EpgChannel.create(
+      channelId: data['channelId'] ?? '',
+      displayName: data['displayName'],
+      icon: data['icon'],
+    )).toList();
+
+    final programs = programsData.map((data) => EpgProgram.create(
+      channelId: data['channelId'] ?? '',
+      title: data['title'] ?? '',
+      description: data['description'],
+      startTime: data['startTime'] as DateTime,
+      endTime: data['endTime'] as DateTime,
+      category: data['category'],
+      icon: data['icon'],
+      rating: data['rating'],
+      episode: data['episode'],
+    )).toList();
+
+    // Save to database
+    await _saveEpgData(channels, programs);
+  }
+
+  // Pure-Dart background parser helper for compute isolate
+  static Map<String, dynamic> _parseXmltvEpgBackground(String xmlContent) {
+    final channelsList = <Map<String, String?>>[];
+    final programsList = <Map<String, dynamic>>[];
 
     // Parse channels
     final channelRegex = RegExp(
@@ -290,11 +320,11 @@ class EpgService {
         icon = iconMatch.group(1);
       }
 
-      channels.add(EpgChannel.create(
-        channelId: channelId,
-        displayName: displayName,
-        icon: icon,
-      ));
+      channelsList.add({
+        'channelId': channelId,
+        'displayName': displayName,
+        'icon': icon,
+      });
     }
 
     // Parse programs - flexible regex for different attribute orders
@@ -302,9 +332,6 @@ class EpgService {
       r'<programme\s+([^>]*)>(.*?)</programme>',
       dotAll: true,
     );
-
-    print('EPG Parser - Searching for programs in ${xmlContent.length} characters...');
-    int programCount = 0;
 
     for (final match in programRegex.allMatches(xmlContent)) {
       final attributes = match.group(1) ?? '';
@@ -329,8 +356,6 @@ class EpgService {
       if (startTime == null || endTime == null) {
         continue;
       }
-
-      programCount++;
 
       String? title;
       String? description;
@@ -384,22 +409,24 @@ class EpgService {
       }
 
       if (title != null && title.isNotEmpty) {
-        programs.add(EpgProgram.create(
-          channelId: channelId,
-          title: title,
-          description: description,
-          startTime: startTime,
-          endTime: endTime,
-          category: category,
-          icon: icon,
-          rating: rating,
-          episode: episode,
-        ));
+        programsList.add({
+          'channelId': channelId,
+          'title': title,
+          'description': description,
+          'startTime': startTime,
+          'endTime': endTime,
+          'category': category,
+          'icon': icon,
+          'rating': rating,
+          'episode': episode,
+        });
       }
     }
 
-    // Save to database
-    await _saveEpgData(channels, programs);
+    return {
+      'channels': channelsList,
+      'programs': programsList,
+    };
   }
 
   static DateTime? _parseXmltvDate(String dateStr) {
@@ -451,19 +478,30 @@ class EpgService {
       List<EpgChannel> channels, List<EpgProgram> programs) async {
     final isar = DatabaseService.isar;
 
+    // Clear old EPG data safely
     await isar.writeTxn(() async {
-      // Clear old EPG data
       await isar.collection<EpgChannel>().clear();
       await isar.collection<EpgProgram>().clear();
-
-      // Save new data
-      if (channels.isNotEmpty) {
-        await isar.collection<EpgChannel>().putAll(channels);
-      }
-      if (programs.isNotEmpty) {
-        await isar.collection<EpgProgram>().putAll(programs);
-      }
     });
+
+    // Save channels in sub-batches of 1000 to prevent memory spikes
+    const int batchSize = 1000;
+    if (channels.isNotEmpty) {
+      for (int i = 0; i < channels.length; i += batchSize) {
+        final end = (i + batchSize < channels.length) ? i + batchSize : channels.length;
+        final batch = channels.sublist(i, end);
+        await isar.writeTxn(() => isar.collection<EpgChannel>().putAll(batch));
+      }
+    }
+
+    // Save programs in sub-batches of 1000
+    if (programs.isNotEmpty) {
+      for (int i = 0; i < programs.length; i += batchSize) {
+        final end = (i + batchSize < programs.length) ? i + batchSize : programs.length;
+        final batch = programs.sublist(i, end);
+        await isar.writeTxn(() => isar.collection<EpgProgram>().putAll(batch));
+      }
+    }
 
     print('EPG loaded: ${channels.length} channels, ${programs.length} programs');
   }
