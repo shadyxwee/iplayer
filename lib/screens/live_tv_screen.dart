@@ -677,9 +677,10 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                   : Column(
                       children: [
                         // Channel info bar
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
+                        if (!_isFullscreen)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -826,17 +827,31 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                // BACKGROUND LAYER (Recovery Buffer)
                                if (_stagingController != null)
                                  SizedBox.expand(
-                                    child: Video(
-                                      controller: _stagingController!,
-                                      controls: NoVideoControls,
+                                    child: GestureDetector(
+                                      onDoubleTap: () {
+                                        setState(() {
+                                          _isFullscreen = !_isFullscreen;
+                                        });
+                                      },
+                                      child: Video(
+                                        controller: _stagingController!,
+                                        controls: NoVideoControls,
+                                      ),
                                     ),
                                   ),
 
                               // FOREGROUND LAYER (Main Video)
                               controller != null && _isPlayerInitialized
-                                  ? Video(
-                                      controller: controller!,
-                                      controls: NoVideoControls,
+                                  ? GestureDetector(
+                                      onDoubleTap: () {
+                                        setState(() {
+                                          _isFullscreen = !_isFullscreen;
+                                        });
+                                      },
+                                      child: Video(
+                                        controller: controller!,
+                                        controls: NoVideoControls,
+                                      ),
                                     )
                                   : Center(
                                       child: CircularProgressIndicator(

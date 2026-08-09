@@ -682,17 +682,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         ),
 
               // Top Controls
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-              child: IgnorePointer(
-                ignoring: !_isControlsVisible,
-                child: AnimatedOpacity(
-                  opacity: _isControlsVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+              if (!_isFullscreen)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                child: IgnorePointer(
+                  ignoring: !_isControlsVisible,
+                  child: AnimatedOpacity(
+                    opacity: _isControlsVisible ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -884,17 +885,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
 
             // Bottom Controls
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                ignoring: !_isControlsVisible,
-                child: AnimatedOpacity(
-                  opacity: _isControlsVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(24, 48, 24, 20),
+            if (!_isFullscreen)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  ignoring: !_isControlsVisible,
+                  child: AnimatedOpacity(
+                    opacity: _isControlsVisible ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(24, 48, 24, 20),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.bottomCenter,
