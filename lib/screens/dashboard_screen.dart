@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import 'dart:io' show Platform;
 import 'package:provider/provider.dart';
+import '../widgets/smooth_page_route.dart';
 import 'live_tv_screen.dart';
 import 'playlist_manager_screen.dart';
 import 'settings_screen.dart';
@@ -183,8 +184,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const PlaylistManagerScreen(),
+            SmoothPageRoute(
+              child: const PlaylistManagerScreen(),
             ),
           ).then((_) {
             _loadPlaylists();
@@ -235,8 +236,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const PlaylistManagerScreen(),
+                SmoothPageRoute(
+                  child: const PlaylistManagerScreen(),
                 ),
               ).then((_) {
                 _loadPlaylists();
@@ -719,7 +720,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildTopActionButton(Icons.person_rounded, () async {
             final result = await Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const ProfilesScreen()),
+              SmoothPageRoute(child: const ProfilesScreen()),
             );
             if (result != null) _loadActiveProfile();
           }),
@@ -758,13 +759,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             showDialog(context: context, builder: (context) => const LanguageSelector());
             break;
           case 'playlists':
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const PlaylistManagerScreen()));
+            Navigator.push(context, SmoothPageRoute(child: const PlaylistManagerScreen()));
             break;
           case 'epg':
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const EpgScreen()));
+            Navigator.push(context, SmoothPageRoute(child: const EpgScreen()));
             break;
           case 'settings':
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+            Navigator.push(context, SmoothPageRoute(child: const SettingsScreen()));
             break;
           case 'logout':
             _showExitDialog(l10n, theme);
@@ -839,7 +840,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Channels',
                 'live',
                 const Color(0xFFE53935),
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LiveTVScreen()))
+                () => Navigator.push(context, SmoothPageRoute(child: const LiveTVScreen()))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -850,7 +851,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Movies',
                 'movies',
                 Colors.white,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)))
+                () => Navigator.push(context, SmoothPageRoute(child: ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -865,7 +866,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Series',
                 'series',
                 Colors.white,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SeriesGridScreen()))
+                () => Navigator.push(context, SmoothPageRoute(child: const SeriesGridScreen()))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -891,7 +892,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Channels',
                 'live',
                 const Color(0xFFE53935),
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const LiveTVScreen()))
+                () => Navigator.push(context, SmoothPageRoute(child: const LiveTVScreen()))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -902,7 +903,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Movies',
                 'movies',
                 Colors.white,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)))
+                () => Navigator.push(context, SmoothPageRoute(child: ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -913,7 +914,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Series',
                 'series',
                 Colors.white,
-                () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SeriesGridScreen()))
+                () => Navigator.push(context, SmoothPageRoute(child: const SeriesGridScreen()))
                     .then((_) => _loadDashboardData()),
                 theme,
               ),
@@ -935,11 +936,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildUtilityItem(Icons.playlist_play_rounded, 'Playlist Manager', () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const PlaylistManagerScreen()));
+          Navigator.push(context, SmoothPageRoute(child: const PlaylistManagerScreen()));
         }),
         const SizedBox(height: 8),
         _buildUtilityItem(Icons.calendar_month_rounded, 'EPG', () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const EpgScreen()));
+          Navigator.push(context, SmoothPageRoute(child: const EpgScreen()));
         }),
         const SizedBox(height: 8),
         _buildUtilityItem(Icons.refresh_rounded, 'Refresh Data', () {
@@ -1881,7 +1882,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const LiveTVScreen()));
+                  Navigator.push(context, SmoothPageRoute(child: const LiveTVScreen()));
                 },
               ),
               _buildDrawerItem(
@@ -1890,7 +1891,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)));
+                  Navigator.push(context, SmoothPageRoute(child: ContentGridScreen(contentType: ContentType.movie, title: l10n.movies)));
                 },
               ),
               _buildDrawerItem(
@@ -1899,7 +1900,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SeriesGridScreen()));
+                  Navigator.push(context, SmoothPageRoute(child: const SeriesGridScreen()));
                 },
               ),
               Divider(color: theme.borderPrimary.withOpacity(0.5)),
@@ -1909,7 +1910,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const PlaylistManagerScreen()));
+                  Navigator.push(context, SmoothPageRoute(child: const PlaylistManagerScreen()));
                 },
               ),
               _buildDrawerItem(
@@ -1918,7 +1919,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const EpgScreen()));
+                  Navigator.push(context, SmoothPageRoute(child: const EpgScreen()));
                 },
               ),
               _buildDrawerItem(
@@ -1927,7 +1928,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 theme: theme,
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
+                  Navigator.push(context, SmoothPageRoute(child: const SettingsScreen()));
                 },
               ),
             ],
