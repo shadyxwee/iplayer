@@ -43,6 +43,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   bool _isReconnecting = false;
   int _recoveryLevel = 0; // 0: None, 1: Soft, 2: Background
   Timer? _stallWatchdog;
+  Timer? _playbackDebounceTimer;
   int _consecutiveFailures = 0;
 
   @override
@@ -97,9 +98,33 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   @override
   void dispose() {
     _stallWatchdog?.cancel();
+    _playbackDebounceTimer?.cancel();
     player?.dispose();
     _stagingPlayer?.dispose();
     super.dispose();
+  }
+
+  void _onChannelFocused(Channel channel) {
+    setState(() {
+      _selectedChannel = channel;
+    });
+
+    _playbackDebounceTimer?.cancel();
+    _playbackDebounceTimer = Timer(const Duration(milliseconds: 750), () {
+      if (mounted) {
+        _playChannel(channel);
+      }
+    });
+  }
+
+  void _playNextAvailableChannel() {
+    if (_filteredChannels.isEmpty || _selectedChannel == null) return;
+    final currentIndex = _filteredChannels.indexWhere((c) => c.id == _selectedChannel!.id);
+    if (currentIndex != -1 && currentIndex + 1 < _filteredChannels.length) {
+      final nextChannel = _filteredChannels[currentIndex + 1];
+      print('🚀 Auto-moving to next channel: ${nextChannel.name} because current stream is unavailable');
+      _onChannelFocused(nextChannel);
+    }
   }
 
   Future<void> _loadChannels() async {
@@ -257,6 +282,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
         }
 
         print('❌ Stream error event received: $error. Letting native reconnect options and stall watchdog handle background recovery.');
+        _playNextAvailableChannel();
       }
     });
 
@@ -543,103 +569,117 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                       final channel = _filteredChannels[index];
                       final isSelected = _selectedChannel?.id == channel.id;
 
-                      return Material(
-                        color: isSelected
-                            ? theme.cardBackgroundLight
-                            : Colors.transparent,
-                        child: InkWell(
-                          onTap: () => _playChannel(channel),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              children: [
-                                // Channel number
-                                Container(
-                                  width: 35,
-                                  height: 28,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? theme.accentPrimary
-                                        : theme.sidebarBackground,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: isSelected ? null : Border.all(color: theme.borderPrimary.withOpacity(0.1)),
-                                  ),
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: TextStyle(
-                                      color: isSelected ? Colors.black : theme.textPrimary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
+                      return Focus(
+                        onFocusChange: (focused) {
+                          if (focused) {
+                            _onChannelFocused(channel);
+                          }
+                        },
+                        child: Builder(
+                          builder: (context) {
+                            final bool hasFocus = Focus.of(context).hasFocus;
+                            final bool isHighlighted = isSelected || hasFocus;
 
-                                // Channel logo
-                                if (channel.logo != null)
-                                  Container(
-                                    width: 35,
-                                    height: 35,
-                                    margin: const EdgeInsets.only(right: 12),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(4),
-                                      color: theme.textPrimary.withOpacity(0.1),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(4),
-                                      child: Image.network(
-                                        channel.logo!,
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Icon(
-                                            Icons.tv,
-                                            color: theme.textSecondary.withOpacity(0.3),
-                                            size: 18,
-                                          );
-                                        },
-                                      ),
-                                    ),
+                            return Material(
+                              color: isHighlighted
+                                  ? theme.cardBackgroundLight
+                                  : Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _playChannel(channel),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
                                   ),
-
-                                // Channel name
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  child: Row(
                                     children: [
-                                      Text(
-                                        channel.name,
-                                        style: TextStyle(
-                                          color: isSelected
+                                      // Channel number
+                                      Container(
+                                        width: 35,
+                                        height: 28,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: isHighlighted
                                               ? theme.accentPrimary
-                                              : theme.textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: isSelected
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
+                                              : theme.sidebarBackground,
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: isHighlighted ? null : Border.all(color: theme.borderPrimary.withValues(alpha: 0.1)),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (channel.group != null)
-                                        Text(
-                                          channel.group!,
+                                        child: Text(
+                                          '${index + 1}',
                                           style: TextStyle(
-                                            color: theme.textSecondary.withOpacity(0.5),
-                                            fontSize: 10,
+                                            color: isHighlighted ? Colors.black : theme.textPrimary,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
                                         ),
+                                      ),
+                                      const SizedBox(width: 12),
+
+                                      // Channel logo
+                                      if (channel.logo != null)
+                                        Container(
+                                          width: 35,
+                                          height: 35,
+                                          margin: const EdgeInsets.only(right: 12),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(4),
+                                            color: theme.textPrimary.withValues(alpha: 0.1),
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(4),
+                                            child: Image.network(
+                                              channel.logo!,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return Icon(
+                                                  Icons.tv,
+                                                  color: theme.textSecondary.withValues(alpha: 0.3),
+                                                  size: 18,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+
+                                      // Channel name
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              channel.name,
+                                              style: TextStyle(
+                                                color: isHighlighted
+                                                    ? theme.accentPrimary
+                                                    : theme.textPrimary,
+                                                fontSize: 13,
+                                                fontWeight: isHighlighted
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (channel.group != null)
+                                              Text(
+                                                channel.group!,
+                                                style: TextStyle(
+                                                  color: theme.textSecondary.withValues(alpha: 0.5),
+                                                  fontSize: 10,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
+                            );
+                          }
                         ),
                       );
                     },
@@ -873,47 +913,62 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   }
 
   Widget _buildCategoryItem(String title, bool isSelected, VoidCallback onTap, AppThemeType theme, {bool hasSub = false, bool isSub = false}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: isSub ? 10 : 14,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: isSelected ? theme.accentPrimary : Colors.transparent,
-                width: 3,
+    return Focus(
+      onFocusChange: (focused) {
+        if (focused) {
+          onTap();
+        }
+      },
+      child: Builder(
+        builder: (context) {
+          final bool hasFocus = Focus.of(context).hasFocus;
+          final bool isHighlighted = isSelected || hasFocus;
+
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: isSub ? 10 : 14,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: isHighlighted ? theme.accentPrimary : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                  color: isHighlighted ? theme.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: isHighlighted ? theme.accentPrimary : theme.textPrimary.withValues(alpha: 0.7),
+                          fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+                          fontSize: isSub ? 13 : 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (hasSub)
+                      Icon(
+                        isHighlighted ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
+                        size: 18,
+                        color: isHighlighted ? theme.accentPrimary : theme.textSecondary.withValues(alpha: 0.5),
+                      ),
+                  ],
+                ),
               ),
             ),
-            color: isSelected ? theme.textPrimary.withOpacity(0.05) : Colors.transparent,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: isSelected ? theme.accentPrimary : theme.textPrimary.withOpacity(0.7),
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: isSub ? 13 : 14,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (hasSub)
-                Icon(
-                  isSelected ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
-                  size: 18,
-                  color: isSelected ? theme.accentPrimary : theme.textSecondary.withOpacity(0.5),
-                ),
-            ],
-          ),
-        ),
+          );
+        }
       ),
     );
   }
