@@ -158,7 +158,7 @@ class _MyAppState extends State<MyApp> {
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   brightness: Brightness.dark,
-                  scaffoldBackgroundColor: const Color(0xFF0A0A0A),
+                  scaffoldBackgroundColor: const Color(0xFF06030C),
                 ),
                 home: const SplashScreen(),
               );
@@ -254,7 +254,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
+      backgroundColor: const Color(0xFF06030C),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -268,10 +268,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.blue.withOpacity(0.3),
+                        color: const Color(0xFFB557FF).withValues(alpha: 0.3),
                         blurRadius: 40,
                         spreadRadius: 5,
                       ),
@@ -334,7 +334,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     height: 48,
                     child: CircularProgressIndicator(
                       strokeWidth: 3.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFB557FF)),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -342,7 +342,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     AppLocalizations.of(context).loading,
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.white.withOpacity(0.6),
+                      color: Colors.white.withValues(alpha: 0.6),
                       letterSpacing: 3,
                     ),
                   ),

@@ -68,106 +68,106 @@ extension AppThemeTypeExtension on AppThemeType {
     }
   }
 
-  // Main colors
+  // Deep dark purple-black backgrounds across all pages
   Color get backgroundPrimary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF12141B);
+        return const Color(0xFF06030C);
       case AppThemeType.nordic:
-        return const Color(0xFF1A1C1E);
+        return const Color(0xFF06040F);
       case AppThemeType.obsidian:
-        return const Color(0xFF0F0F0F);
+        return const Color(0xFF05030B);
       case AppThemeType.emerald:
-        return const Color(0xFF0A1412);
+        return const Color(0xFF04030D);
       case AppThemeType.royal:
-        return const Color(0xFF120E1A);
+        return const Color(0xFF070412);
       case AppThemeType.sunset:
-        return const Color(0xFF1A0F0F);
+        return const Color(0xFF06030E);
     }
   }
 
   Color get backgroundSecondary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF181B24);
+        return const Color(0xFF0B0616);
       case AppThemeType.nordic:
-        return const Color(0xFF232629);
+        return const Color(0xFF0B081B);
       case AppThemeType.obsidian:
-        return const Color(0xFF1A1A1A);
+        return const Color(0xFF0C071A);
       case AppThemeType.emerald:
-        return const Color(0xFF11211E);
+        return const Color(0xFF09081B);
       case AppThemeType.royal:
-        return const Color(0xFF1A1426);
+        return const Color(0xFF0E0824);
       case AppThemeType.sunset:
-        return const Color(0xFF241414);
+        return const Color(0xFF0C061C);
     }
   }
 
   Color get backgroundTertiary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF1E2129);
+        return const Color(0xFF120924);
       case AppThemeType.nordic:
-        return const Color(0xFF2D3033);
+        return const Color(0xFF120E2C);
       case AppThemeType.obsidian:
-        return const Color(0xFF242424);
+        return const Color(0xFF150D2D);
       case AppThemeType.emerald:
-        return const Color(0xFF1A2E2A);
+        return const Color(0xFF100F2F);
       case AppThemeType.royal:
-        return const Color(0xFF241C33);
+        return const Color(0xFF170E3A);
       case AppThemeType.sunset:
-        return const Color(0xFF331C1C);
+        return const Color(0xFF150A2E);
     }
   }
 
   Color get sidebarBackground {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF16181F);
+        return const Color(0xFF080410);
       case AppThemeType.nordic:
-        return const Color(0xFF1E2022);
+        return const Color(0xFF080512);
       case AppThemeType.obsidian:
-        return const Color(0xFF121212);
+        return const Color(0xFF07040E);
       case AppThemeType.emerald:
-        return const Color(0xFF0E1A17);
+        return const Color(0xFF060410);
       case AppThemeType.royal:
-        return const Color(0xFF16121E);
+        return const Color(0xFF090516);
       case AppThemeType.sunset:
-        return const Color(0xFF1E1616);
+        return const Color(0xFF080411);
     }
   }
 
   Color get cardBackground {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF1E2129);
+        return const Color(0xFF160D2A);
       case AppThemeType.nordic:
-        return const Color(0xFF2D3033);
+        return const Color(0xFF151030);
       case AppThemeType.obsidian:
-        return const Color(0xFF1F1F1F);
+        return const Color(0xFF191036);
       case AppThemeType.emerald:
-        return const Color(0xFF1A2E2A);
+        return const Color(0xFF141337);
       case AppThemeType.royal:
-        return const Color(0xFF241C33);
+        return const Color(0xFF1C1145);
       case AppThemeType.sunset:
-        return const Color(0xFF331C1C);
+        return const Color(0xFF190C36);
     }
   }
 
   Color get cardBackgroundLight {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF282C37);
+        return const Color(0xFF26194C);
       case AppThemeType.nordic:
-        return const Color(0xFF383C40);
+        return const Color(0xFF251A52);
       case AppThemeType.obsidian:
-        return const Color(0xFF2A2A2A);
+        return const Color(0xFF291B58);
       case AppThemeType.emerald:
-        return const Color(0xFF233D38);
+        return const Color(0xFF241E59);
       case AppThemeType.royal:
-        return const Color(0xFF2F2442);
+        return const Color(0xFF2C1E67);
       case AppThemeType.sunset:
-        return const Color(0xFF422424);
+        return const Color(0xFF291B58);
     }
   }
 
@@ -176,57 +176,59 @@ extension AppThemeTypeExtension on AppThemeType {
   }
 
   Color get cardTextSecondary {
-    return Colors.white.withOpacity(0.6);
+    return Colors.white.withValues(alpha: 0.6);
   }
 
+  // Soft purple-tinted borders for subtle purple glow aesthetic
   Color get borderPrimary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF2C313E);
+        return const Color(0xFF4C1E9E);
       case AppThemeType.nordic:
-        return const Color(0xFF3E4348);
+        return const Color(0xFF2C3E9C);
       case AppThemeType.obsidian:
-        return const Color(0xFF333333);
+        return const Color(0xFF6F3E9C);
       case AppThemeType.emerald:
-        return const Color(0xFF2E4842);
+        return const Color(0xFF1E6C9E);
       case AppThemeType.royal:
-        return const Color(0xFF3A2E50);
+        return const Color(0xFF7229E6);
       case AppThemeType.sunset:
-        return const Color(0xFF502E2E);
+        return const Color(0xFF8A1E9E);
     }
   }
 
+  // Vibrant purple/neon accents for highlights, active states, and buttons
   Color get accentPrimary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFFBB86FC); // Soft Purple
+        return const Color(0xFFB557FF); // Vibrant Violet
       case AppThemeType.nordic:
-        return const Color(0xFF81D4FA); // Soft Blue
+        return const Color(0xFF8C52FF); // Medium Purple-Indigo
       case AppThemeType.obsidian:
-        return const Color(0xFFFFD700); // Gold
+        return const Color(0xFFD631FF); // Intense Pink-Purple
       case AppThemeType.emerald:
-        return const Color(0xFF00C853); // Emerald Green
+        return const Color(0xFF6E00FF); // Deep electric indigo-violet
       case AppThemeType.royal:
-        return const Color(0xFFE040FB); // Vibrant Purple
+        return const Color(0xFFDF40FF); // High-contrast magenta purple
       case AppThemeType.sunset:
-        return const Color(0xFFFF5252); // Vibrant Red/Coral
+        return const Color(0xFFFF40D9); // Hot magenta neon
     }
   }
 
   Color get accentSecondary {
     switch (this) {
       case AppThemeType.midnight:
-        return const Color(0xFF03DAC6); // Teal
+        return const Color(0xFFEA48FF);
       case AppThemeType.nordic:
-        return const Color(0xFF90CAF9); // Light Blue
+        return const Color(0xFF00E5FF);
       case AppThemeType.obsidian:
-        return const Color(0xFFFFA000); // Amber
+        return const Color(0xFFFFD700);
       case AppThemeType.emerald:
-        return const Color(0xFF64FFDA); // Aqua
+        return const Color(0xFF00E676);
       case AppThemeType.royal:
-        return const Color(0xFFFFAB40); // Vibrant Amber
+        return const Color(0xFFFFAB40);
       case AppThemeType.sunset:
-        return const Color(0xFFFF8A80); // Vibrant Pink
+        return const Color(0xFFFF3D00);
     }
   }
 
@@ -235,24 +237,37 @@ extension AppThemeTypeExtension on AppThemeType {
   }
 
   Color get textSecondary {
-    return Colors.white.withOpacity(0.6);
+    return const Color(0xFFB0B0C0); // Soft gray typography
   }
 
-  // New gradient support for premium feel
+  // Premium gradient support with purple elements
   List<Color> get primaryGradient {
-    switch (this) {
-      case AppThemeType.midnight:
-        return [const Color(0xFFBB86FC), const Color(0xFF6200EE)];
-      case AppThemeType.nordic:
-        return [const Color(0xFF81D4FA), const Color(0xFF0288D1)];
-      case AppThemeType.obsidian:
-        return [const Color(0xFFFFD700), const Color(0xFFB8860B)];
-      case AppThemeType.emerald:
-        return [const Color(0xFF00C853), const Color(0xFF1B5E20)];
-      case AppThemeType.royal:
-        return [const Color(0xFFE040FB), const Color(0xFF7B1FA2)];
-      case AppThemeType.sunset:
-        return [const Color(0xFFFF5252), const Color(0xFFFF9100)];
-    }
+    return [accentPrimary, const Color(0xFF7B1FA2)];
+  }
+
+  // Soft rounded glass-style cards decoration with subtle purple glow
+  BoxDecoration glassCardDecoration({double borderRadius = 20, bool hasGlow = true}) {
+    final glowColor = accentPrimary.withValues(alpha: 0.18);
+    return BoxDecoration(
+      color: cardBackground.withValues(alpha: 0.65),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: borderPrimary.withValues(alpha: 0.35),
+        width: 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.45),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+        if (hasGlow)
+          BoxShadow(
+            color: glowColor,
+            blurRadius: 20,
+            spreadRadius: -4,
+          ),
+      ],
+    );
   }
 }

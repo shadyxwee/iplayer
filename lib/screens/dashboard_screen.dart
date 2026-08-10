@@ -1000,14 +1000,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Container(
             height: 180,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.05),
-                width: 1,
-              ),
-            ),
+            decoration: theme.glassCardDecoration(borderRadius: 20, hasGlow: true),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1116,11 +1109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(28),
         child: Container(
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: theme.textPrimary.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: theme.textPrimary.withOpacity(0.05)),
-          ),
+          decoration: theme.glassCardDecoration(borderRadius: 28, hasGlow: true),
           child: Row(
             children: [
               Container(
@@ -1230,11 +1219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: 180,
           height: 220,
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: theme.backgroundTertiary.withOpacity(0.4),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.white.withOpacity(0.05), width: 1),
-          ),
+          decoration: theme.glassCardDecoration(borderRadius: 32, hasGlow: true),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1628,14 +1613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(24),
         child: Container(
           height: 100,
-          decoration: BoxDecoration(
-            color: theme.cardBackground,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: theme.borderPrimary.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
+          decoration: theme.glassCardDecoration(borderRadius: 24, hasGlow: true),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1685,14 +1663,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
           borderRadius: BorderRadius.circular(24),
           child: Container(
-            decoration: BoxDecoration(
-              color: theme.cardBackground,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: theme.borderPrimary.withOpacity(0.3),
-                width: 1,
-              ),
-            ),
+            decoration: theme.glassCardDecoration(borderRadius: 24, hasGlow: true),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

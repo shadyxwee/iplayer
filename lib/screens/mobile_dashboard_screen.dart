@@ -339,6 +339,7 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
   }
 
   Widget _buildLargeNavCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+    final theme = Provider.of<ThemeProvider>(context).currentTheme;
     return _FocusableButton(
       onTap: onTap,
       builder: (context, focused) => AnimatedScale(
@@ -346,10 +347,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
         duration: const Duration(milliseconds: 200),
         child: Container(
           height: 180,
-          decoration: BoxDecoration(
-            color: focused ? const Color(0xFF252545) : const Color(0xFF1A1A2E),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: focused ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.05), width: focused ? 2 : 1),
+          decoration: theme.glassCardDecoration(borderRadius: 24, hasGlow: focused).copyWith(
+            color: focused ? theme.cardBackgroundLight.withValues(alpha: 0.8) : theme.cardBackground.withValues(alpha: 0.65),
+            border: Border.all(
+              color: focused ? theme.accentPrimary : theme.borderPrimary.withValues(alpha: 0.35),
+              width: focused ? 2 : 1.2,
+            ),
           ),
           child: Stack(
             children: [
@@ -487,12 +490,12 @@ class _MobileDashboardScreenState extends State<MobileDashboardScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E32),
+                  color: theme.cardBackground.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: focused ? theme.accentPrimary : Colors.white.withOpacity(0.05), width: 2),
+                  border: Border.all(color: focused ? theme.accentPrimary : theme.borderPrimary.withValues(alpha: 0.35), width: 2),
                   boxShadow: [
-                    if (focused) BoxShadow(color: theme.accentPrimary.withOpacity(0.3), blurRadius: 15),
-                    BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4)),
+                    if (focused) BoxShadow(color: theme.accentPrimary.withValues(alpha: 0.3), blurRadius: 15),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 6)),
                   ],
                   image: channel.logo != null && channel.logo!.isNotEmpty ? DecorationImage(
                     image: NetworkImage(channel.logo!),
