@@ -431,63 +431,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String tooltip,
     bool hasBadge = false,
   }) {
+    bool isHovered = false;
+
     return Focus(
       focusNode: focusNode,
-      child: Builder(builder: (context) {
-        final isFocused = Focus.of(context).hasFocus;
-        return Tooltip(
-          message: tooltip,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: isFocused ? const Color(0xFF282645) : const Color(0xFF1E1D34),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isFocused ? const Color(0xFF6366F1) : const Color(0xFF2E2B52),
-                  width: isFocused ? 2 : 1,
-                ),
-                boxShadow: isFocused
-                    ? [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                          blurRadius: 8,
-                        ),
-                      ]
-                    : [],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(
-                    icon,
-                    color: isFocused ? Colors.white : const Color(0xFFCBD5E1),
-                    size: 20,
-                  ),
-                  if (hasBadge)
-                    Positioned(
-                      top: 9,
-                      right: 9,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE53935),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF1E1D34), width: 1.5),
-                        ),
-                      ),
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          final isFocused = Focus.of(context).hasFocus;
+          final active = isFocused || isHovered;
+
+          return MouseRegion(
+            onEnter: (_) => setState(() => isHovered = true),
+            onExit: (_) => setState(() => isHovered = false),
+            cursor: SystemMouseCursors.click,
+            child: Tooltip(
+              message: tooltip,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(20),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: active ? const Color(0xFF282645) : const Color(0xFF1E1D34),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: active ? const Color(0xFF6366F1) : const Color(0xFF2E2B52),
+                      width: active ? 2 : 1,
                     ),
-                ],
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        color: active ? Colors.white : const Color(0xFFCBD5E1),
+                        size: 20,
+                      ),
+                      if (hasBadge)
+                        Positioned(
+                          top: 9,
+                          right: 9,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE53935),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF1E1D34), width: 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 
@@ -641,108 +652,119 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required VoidCallback onTap,
     String? badgeText,
   }) {
+    bool isHovered = false;
+
     return Focus(
       focusNode: focusNode,
-      child: Builder(builder: (context) {
-        final isFocused = Focus.of(context).hasFocus;
-        return InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-            transform: isFocused
-                ? Matrix4.translationValues(0.0, -4.0, 0.0)
-                : Matrix4.identity(),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF1B1A32),
-                  Color(0xFF16152A),
-                ],
-              ),
-              border: Border.all(
-                color: isFocused ? const Color(0xFF6366F1) : const Color(0xFF2C2A4C),
-                width: isFocused ? 2 : 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: isFocused
-                      ? const Color(0xFF6366F1).withValues(alpha: 0.3)
-                      : Colors.black.withValues(alpha: 0.3),
-                  blurRadius: isFocused ? 20 : 12,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Center Graphic
-                Container(
-                  margin: const EdgeInsets.only(bottom: 20),
-                  child: graphic,
-                ),
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          final isFocused = Focus.of(context).hasFocus;
+          final active = isFocused || isHovered;
 
-                // Title Row with optional Live pill badge
-                Row(
+          return MouseRegion(
+            onEnter: (_) => setState(() => isHovered = true),
+            onExit: (_) => setState(() => isHovered = false),
+            cursor: SystemMouseCursors.click,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: const Cubic(0.2, 0.0, 0.0, 1.0),
+                transform: active
+                    ? Matrix4.translationValues(0.0, -3.0, 0.0)
+                    : Matrix4.identity(),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF1B1A32),
+                      Color(0xFF16152A),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: active ? const Color(0xFF6366F1) : const Color(0xFF2C2A4C),
+                    width: active ? 2 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: active
+                          ? const Color(0xFF6366F1).withValues(alpha: 0.25)
+                          : Colors.black.withValues(alpha: 0.3),
+                      blurRadius: active ? 25 : 12,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (badgeText != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE53935),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFE53935).withValues(alpha: 0.4),
-                              blurRadius: 4,
+                    // Center Graphic
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      child: graphic,
+                    ),
+
+                    // Title Row with optional Live pill badge
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (badgeText != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE53935),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFE53935).withValues(alpha: 0.4),
+                                  blurRadius: 4,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          badgeText,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
+                            child: Text(
+                              badgeText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                        Text(
+                          titleText,
+                          style: TextStyle(
+                            color: active ? const Color(0xFFC7D2FE) : Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Subtext / Counter
                     Text(
-                      titleText,
-                      style: TextStyle(
-                        color: isFocused ? const Color(0xFFC7D2FE) : Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
+                      counterText,
+                      style: const TextStyle(
+                        color: Color(0xFF8F92A9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.normal,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-
-                // Subtext / Counter
-                Text(
-                  counterText,
-                  style: const TextStyle(
-                    color: Color(0xFF8F92A9),
-                    fontSize: 12,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 
@@ -753,79 +775,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required VoidCallback onTap,
     bool isFavoritesIcon = false,
   }) {
+    bool isHovered = false;
+
     return Expanded(
       child: Focus(
         focusNode: focusNode,
-        child: Builder(builder: (context) {
-          final isFocused = Focus.of(context).hasFocus;
-          return InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              transform: isFocused
-                  ? Matrix4.translationValues(4.0, 0.0, 0.0)
-                  : Matrix4.identity(),
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              decoration: BoxDecoration(
-                color: isFocused ? const Color(0xFF2B294D) : const Color(0xFF1B1A32),
+        child: StatefulBuilder(
+          builder: (context, setState) {
+            final isFocused = Focus.of(context).hasFocus;
+            final active = isFocused || isHovered;
+
+            return MouseRegion(
+              onEnter: (_) => setState(() => isHovered = true),
+              onExit: (_) => setState(() => isHovered = false),
+              cursor: SystemMouseCursors.click,
+              child: InkWell(
+                onTap: onTap,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isFocused ? const Color(0xFF4F46E5) : const Color(0xFF2B294D),
-                  width: isFocused ? 1.5 : 1.0,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    margin: const EdgeInsets.only(right: 16),
-                    child: isFavoritesIcon
-                        ? Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Icon(
-                                Icons.crop_16_9,
-                                size: 32,
-                                color: isFocused ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                              ),
-                              Icon(
-                                Icons.favorite,
-                                size: 14,
-                                color: isFocused ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                              ),
-                            ],
-                          )
-                        : Icon(
-                            icon,
-                            size: 30,
-                            color: isFocused ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                          ),
-                  ),
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.ease,
+                  transform: active
+                      ? Matrix4.translationValues(4.0, 0.0, 0.0)
+                      : Matrix4.identity(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  decoration: BoxDecoration(
+                    color: active ? const Color(0xFF2B294D) : const Color(0xFF1B1A32),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: active ? const Color(0xFF4F46E5) : const Color(0xFF2B294D),
+                      width: active ? 1.5 : 1.0,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: active
+                            ? const Color(0xFF4F46E5).withValues(alpha: 0.2)
+                            : Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        margin: const EdgeInsets.only(right: 16),
+                        child: isFavoritesIcon
+                            ? Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.crop_16_9,
+                                    size: 32,
+                                    color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                                  ),
+                                  Icon(
+                                    Icons.favorite,
+                                    size: 14,
+                                    color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                                  ),
+                                ],
+                              )
+                            : Icon(
+                                icon,
+                                size: 30,
+                                color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                              ),
+                      ),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
       ),
     );
   }
