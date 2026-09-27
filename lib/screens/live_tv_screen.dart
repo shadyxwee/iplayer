@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../models/channel.dart';
@@ -50,7 +51,12 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   final FocusNode _backFocusNode = FocusNode();
   final FocusNode _refreshFocusNode = FocusNode();
   final FocusNode _epgFocusNode = FocusNode();
+  final FocusNode _fullscreenPlayerFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
+
+  // Active Focus Nodes map for Lists
+  final Map<int, FocusNode> _categoryFocusNodes = {};
+  final Map<int, FocusNode> _channelFocusNodes = {};
 
   @override
   void initState() {
@@ -136,10 +142,27 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     _backFocusNode.dispose();
     _refreshFocusNode.dispose();
     _epgFocusNode.dispose();
+    _fullscreenPlayerFocusNode.dispose();
     _searchController.dispose();
+
+    for (final f in _categoryFocusNodes.values) {
+      f.dispose();
+    }
+    for (final f in _channelFocusNodes.values) {
+      f.dispose();
+    }
+
     player?.dispose();
     _stagingPlayer?.dispose();
     super.dispose();
+  }
+
+  FocusNode _getCategoryFocusNode(int index) {
+    return _categoryFocusNodes.putIfAbsent(index, () => FocusNode());
+  }
+
+  FocusNode _getChannelFocusNode(int index) {
+    return _channelFocusNodes.putIfAbsent(index, () => FocusNode());
   }
 
   Future<void> _loadChannels() async {
@@ -411,13 +434,18 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
               itemBuilder: (context, index) {
                 if (index == 0) {
                   final isSelected = _selectedParentCategory == null;
-                  return _buildCategoryTile(l10n.all, isSelected, () {
-                    setState(() {
-                      _selectedParentCategory = null;
-                      _selectedSubCategory = null;
-                    });
-                    _filterChannels();
-                  });
+                  return _buildCategoryTile(
+                    index: 0,
+                    title: l10n.all,
+                    isSelected: isSelected,
+                    onTap: () {
+                      setState(() {
+                        _selectedParentCategory = null;
+                        _selectedSubCategory = null;
+                      });
+                      _filterChannels();
+                    },
+                  );
                 }
 
                 final parent = _hierarchy.keys.elementAt(index - 1);
@@ -426,30 +454,44 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
                 return Column(
                   children: [
-                    _buildCategoryTile(parent, isParentSelected, () {
-                      setState(() {
-                        if (_selectedParentCategory == parent && _selectedSubCategory == 'All') {
-                          _selectedParentCategory = null;
-                          _selectedSubCategory = null;
-                        } else {
-                          _selectedParentCategory = parent;
-                          _selectedSubCategory = 'All';
-                        }
-                      });
-                      _filterChannels();
-                    }, hasSub: subs.length > 1),
+                    _buildCategoryTile(
+                      index: index,
+                      title: parent,
+                      isSelected: isParentSelected,
+                      hasSub: subs.length > 1,
+                      onTap: () {
+                        setState(() {
+                          if (_selectedParentCategory == parent && _selectedSubCategory == 'All') {
+                            _selectedParentCategory = null;
+                            _selectedSubCategory = null;
+                          } else {
+                            _selectedParentCategory = parent;
+                            _selectedSubCategory = 'All';
+                          }
+                        });
+                        _filterChannels();
+                      },
+                    ),
 
                     if (isParentSelected && subs.length > 1)
-                      ...subs.keys.map((sub) {
+                      ...subs.keys.toList().asMap().entries.map((entry) {
+                        final subIndex = entry.key;
+                        final sub = entry.value;
                         final isSubSelected = _selectedSubCategory == sub;
                         return Padding(
                           padding: const EdgeInsets.only(left: 16),
-                          child: _buildCategoryTile(sub, isSubSelected, () {
-                            setState(() {
-                              _selectedSubCategory = sub;
-                            });
-                            _filterChannels();
-                          }, isSub: true),
+                          child: _buildCategoryTile(
+                            index: (index * 100) + subIndex + 1,
+                            title: sub,
+                            isSelected: isSubSelected,
+                            isSub: true,
+                            onTap: () {
+                              setState(() {
+                                _selectedSubCategory = sub;
+                              });
+                              _filterChannels();
+                            },
+                          ),
                         );
                       }),
                   ],
@@ -462,18 +504,43 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     );
   }
 
-  Widget _buildCategoryTile(String title, bool isSelected, VoidCallback onTap, {bool hasSub = false, bool isSub = false}) {
+  Widget _buildCategoryTile({
+    required int index,
+    required String title,
+    required bool isSelected,
+    required VoidCallback onTap,
+    bool hasSub = false,
+    bool isSub = false,
+  }) {
     bool isHovered = false;
-    final focusNode = FocusNode();
+    final focusNode = _getCategoryFocusNode(index);
 
-    return StatefulBuilder(
-      builder: (context, setState) {
-        final isFocused = focusNode.hasFocus;
-        final active = isSelected || isFocused || isHovered;
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.space ||
+              key == LogicalKeyboardKey.select) {
+            onTap();
+            return KeyEventResult.handled;
+          } else if (key == LogicalKeyboardKey.arrowRight) {
+            if (_filteredChannels.isNotEmpty) {
+              _getChannelFocusNode(0).requestFocus();
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          final isFocused = focusNode.hasFocus;
+          final active = isSelected || isFocused || isHovered;
 
-        return Focus(
-          focusNode: focusNode,
-          child: MouseRegion(
+          return MouseRegion(
             onEnter: (_) => setState(() => isHovered = true),
             onExit: (_) => setState(() => isHovered = false),
             cursor: SystemMouseCursors.click,
@@ -518,9 +585,9 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -547,6 +614,21 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 Expanded(
                   child: Focus(
                     focusNode: _searchFocusNode,
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent) {
+                        final key = event.logicalKey;
+                        if (key == LogicalKeyboardKey.arrowDown) {
+                          if (_filteredChannels.isNotEmpty) {
+                            _getChannelFocusNode(0).requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                        } else if (key == LogicalKeyboardKey.arrowLeft) {
+                          _getCategoryFocusNode(0).requestFocus();
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      return KeyEventResult.ignored;
+                    },
                     child: Builder(builder: (context) {
                       final isFocused = Focus.of(context).hasFocus;
                       return Container(
@@ -614,16 +696,32 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 final channel = _filteredChannels[index];
                 final isSelected = _selectedChannel?.id == channel.id;
                 bool isHovered = false;
-                final itemFocusNode = FocusNode();
+                final itemFocusNode = _getChannelFocusNode(index);
 
-                return StatefulBuilder(
-                  builder: (context, setState) {
-                    final isFocused = itemFocusNode.hasFocus;
-                    final active = isSelected || isFocused || isHovered;
+                return Focus(
+                  focusNode: itemFocusNode,
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent) {
+                      final key = event.logicalKey;
+                      if (key == LogicalKeyboardKey.enter ||
+                          key == LogicalKeyboardKey.numpadEnter ||
+                          key == LogicalKeyboardKey.space ||
+                          key == LogicalKeyboardKey.select) {
+                        _playChannel(channel);
+                        return KeyEventResult.handled;
+                      } else if (key == LogicalKeyboardKey.arrowLeft) {
+                        _getCategoryFocusNode(0).requestFocus();
+                        return KeyEventResult.handled;
+                      }
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      final isFocused = itemFocusNode.hasFocus;
+                      final active = isSelected || isFocused || isHovered;
 
-                    return Focus(
-                      focusNode: itemFocusNode,
-                      child: MouseRegion(
+                      return MouseRegion(
                         onEnter: (_) => setState(() => isHovered = true),
                         onExit: (_) => setState(() => isHovered = false),
                         cursor: SystemMouseCursors.click,
@@ -708,9 +806,9 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 );
               },
             ),
@@ -809,160 +907,183 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   }
 
   Widget _buildFullscreenPlayer(AppLocalizations l10n) {
-    return MouseRegion(
-      onHover: (_) => _showOverlay(),
-      onEnter: (_) => _showOverlay(),
-      child: GestureDetector(
-        onTap: _toggleOverlay,
-        child: Stack(
-          children: [
-            // Pure Fullscreen Video Surface (Zero window title / app bars)
-            SizedBox.expand(
-              child: controller != null
-                  ? Video(controller: controller!, controls: NoVideoControls)
-                  : const SizedBox.shrink(),
-            ),
+    return Focus(
+      focusNode: _fullscreenPlayerFocusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.space) {
+            player?.playOrPause();
+            _showOverlay();
+            return KeyEventResult.handled;
+          } else if (key == LogicalKeyboardKey.arrowLeft) {
+            _playPreviousChannel();
+            _showOverlay();
+            return KeyEventResult.handled;
+          } else if (key == LogicalKeyboardKey.arrowRight) {
+            _playNextChannel();
+            _showOverlay();
+            return KeyEventResult.handled;
+          } else if (key == LogicalKeyboardKey.escape) {
+            setState(() {
+              _isFullscreen = false;
+            });
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: MouseRegion(
+        onHover: (_) => _showOverlay(),
+        onEnter: (_) => _showOverlay(),
+        child: GestureDetector(
+          onTap: _toggleOverlay,
+          child: Stack(
+            children: [
+              SizedBox.expand(
+                child: controller != null
+                    ? Video(controller: controller!, controls: NoVideoControls)
+                    : const SizedBox.shrink(),
+              ),
 
-            // Auto-hiding Media Controls Overlay
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: !_isOverlayVisible,
-                child: AnimatedOpacity(
-                  opacity: _isOverlayVisible ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.7),
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.8),
-                        ],
-                        stops: const [0.0, 0.5, 1.0],
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Minimal Channel Info Overlay Header
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                          child: Row(
-                            children: [
-                              Text(
-                                _selectedChannel?.name ?? '',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  shadows: [Shadow(color: Colors.black, blurRadius: 8)],
-                                ),
-                              ),
-                              const Spacer(),
-                              IconButton(
-                                icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
-                                tooltip: l10n.exitFullscreenTooltip,
-                                onPressed: () {
-                                  setState(() {
-                                    _isFullscreen = false;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Center Fullscreen Media Controls
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildMediaControlButton(
-                              icon: Icons.skip_previous,
-                              size: 32,
-                              onTap: _playPreviousChannel,
-                            ),
-                            const SizedBox(width: 24),
-                            if (player != null)
-                              StreamBuilder<bool>(
-                                stream: player!.stream.playing,
-                                builder: (context, snapshot) {
-                                  final isPlaying = snapshot.data ?? false;
-                                  return _buildMediaControlButton(
-                                    icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                                    size: 44,
-                                    isPrimary: true,
-                                    onTap: () {
-                                      player?.playOrPause();
-                                    },
-                                  );
-                                },
-                              ),
-                            const SizedBox(width: 24),
-                            _buildMediaControlButton(
-                              icon: Icons.skip_next,
-                              size: 32,
-                              onTap: _playNextChannel,
-                            ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  ignoring: !_isOverlayVisible,
+                  child: AnimatedOpacity(
+                    opacity: _isOverlayVisible ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.7),
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.8),
                           ],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                            child: Row(
+                              children: [
+                                Text(
+                                  _selectedChannel?.name ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                                  ),
+                                ),
+                                const Spacer(),
+                                IconButton(
+                                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
+                                  tooltip: l10n.exitFullscreenTooltip,
+                                  onPressed: () {
+                                    setState(() {
+                                      _isFullscreen = false;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
 
-                        // Bottom Volume & Track Utility Bar
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                          child: Row(
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              _buildMediaControlButton(
+                                icon: Icons.skip_previous,
+                                size: 32,
+                                onTap: _playPreviousChannel,
+                              ),
+                              const SizedBox(width: 24),
                               if (player != null)
-                                StreamBuilder<double>(
-                                  stream: player!.stream.volume,
+                                StreamBuilder<bool>(
+                                  stream: player!.stream.playing,
                                   builder: (context, snapshot) {
-                                    final vol = snapshot.data ?? 100.0;
-                                    return Row(
-                                      children: [
-                                        Icon(
-                                          vol == 0 ? Icons.volume_off : Icons.volume_up,
-                                          color: Colors.white,
-                                          size: 22,
-                                        ),
-                                        SizedBox(
-                                          width: 120,
-                                          child: Slider(
-                                            value: vol.clamp(0.0, 100.0),
-                                            min: 0,
-                                            max: 100,
-                                            activeColor: const Color(0xFF6366F1),
-                                            inactiveColor: Colors.white30,
-                                            onChanged: (v) => player?.setVolume(v),
-                                          ),
-                                        ),
-                                      ],
+                                    final isPlaying = snapshot.data ?? false;
+                                    return _buildMediaControlButton(
+                                      icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                                      size: 44,
+                                      isPrimary: true,
+                                      onTap: () {
+                                        player?.playOrPause();
+                                      },
                                     );
                                   },
                                 ),
-                              const Spacer(),
-                              IconButton(
-                                icon: Icon(
-                                  _selectedChannel?.isFavorite == true ? Icons.favorite : Icons.favorite_border,
-                                  color: _selectedChannel?.isFavorite == true ? const Color(0xFFE53935) : Colors.white,
-                                ),
-                                onPressed: () async {
-                                  if (_selectedChannel != null) {
-                                    await DatabaseService.toggleFavorite(_selectedChannel!);
-                                    setState(() {});
-                                  }
-                                },
+                              const SizedBox(width: 24),
+                              _buildMediaControlButton(
+                                icon: Icons.skip_next,
+                                size: 32,
+                                onTap: _playNextChannel,
                               ),
                             ],
                           ),
-                        ),
-                      ],
+
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                            child: Row(
+                              children: [
+                                if (player != null)
+                                  StreamBuilder<double>(
+                                    stream: player!.stream.volume,
+                                    builder: (context, snapshot) {
+                                      final vol = snapshot.data ?? 100.0;
+                                      return Row(
+                                        children: [
+                                          Icon(
+                                            vol == 0 ? Icons.volume_off : Icons.volume_up,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                          SizedBox(
+                                            width: 120,
+                                            child: Slider(
+                                              value: vol.clamp(0.0, 100.0),
+                                              min: 0,
+                                              max: 100,
+                                              activeColor: const Color(0xFF6366F1),
+                                              inactiveColor: Colors.white30,
+                                              onChanged: (v) => player?.setVolume(v),
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                const Spacer(),
+                                IconButton(
+                                  icon: Icon(
+                                    _selectedChannel?.isFavorite == true ? Icons.favorite : Icons.favorite_border,
+                                    color: _selectedChannel?.isFavorite == true ? const Color(0xFFE53935) : Colors.white,
+                                  ),
+                                  onPressed: () async {
+                                    if (_selectedChannel != null) {
+                                      await DatabaseService.toggleFavorite(_selectedChannel!);
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1013,6 +1134,19 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
     return Focus(
       focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.space ||
+              key == LogicalKeyboardKey.select) {
+            onTap();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: StatefulBuilder(
         builder: (context, setState) {
           final isFocused = Focus.of(context).hasFocus;

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/channel.dart';
@@ -435,6 +436,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Focus(
       focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.space ||
+              key == LogicalKeyboardKey.select) {
+            onTap();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: StatefulBuilder(
         builder: (context, setState) {
           final isFocused = Focus.of(context).hasFocus;
@@ -656,6 +670,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Focus(
       focusNode: focusNode,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter ||
+              key == LogicalKeyboardKey.space ||
+              key == LogicalKeyboardKey.select) {
+            onTap();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
       child: StatefulBuilder(
         builder: (context, setState) {
           final isFocused = Focus.of(context).hasFocus;
@@ -780,6 +807,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Expanded(
       child: Focus(
         focusNode: focusNode,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent) {
+            final key = event.logicalKey;
+            if (key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.numpadEnter ||
+                key == LogicalKeyboardKey.space ||
+                key == LogicalKeyboardKey.select) {
+              onTap();
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
         child: StatefulBuilder(
           builder: (context, setState) {
             final isFocused = Focus.of(context).hasFocus;
