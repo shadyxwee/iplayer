@@ -1,12 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/channel.dart';
 import '../services/database_service.dart';
 import '../services/m3u_parser.dart';
-import '../providers/theme_provider.dart';
-import '../utils/app_theme.dart';
 import '../widgets/smooth_page_route.dart';
 import 'movie_detail_screen.dart';
 import 'video_player_screen.dart';
@@ -39,9 +36,6 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
   Channel? _featuredContent;
   bool _isLoading = true;
   final ScrollController _scrollController = ScrollController();
-
-  final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _backFocusNode = FocusNode();
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -53,8 +47,6 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _searchFocusNode.dispose();
-    _backFocusNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -177,17 +169,11 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
         child: SafeArea(
           child: Row(
             children: [
-              // Left Sidebar - Categories
               _buildCategorySidebar(l10n),
-
-              // Right side - Main Content Surface
               Expanded(
                 child: Column(
                   children: [
-                    // Top Bar with Sort Dropdown & Title Count
                     _buildTopHeaderBar(l10n),
-
-                    // Main View
                     Expanded(
                       child: _selectedParentCategory == null && _searchQuery.isEmpty
                           ? _buildHomeView(l10n)
@@ -212,16 +198,14 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
       ),
       child: Column(
         children: [
-          // Logo & Back Button
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                _buildFocusIconButton(
-                  focusNode: _backFocusNode,
-                  icon: Icons.arrow_back,
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
                   tooltip: l10n.backButton,
-                  onTap: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(context),
                 ),
                 const SizedBox(width: 12),
                 Container(
@@ -247,52 +231,42 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
             ),
           ),
 
-          // Search Box
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Focus(
-              focusNode: _searchFocusNode,
-              child: Builder(builder: (context) {
-                final isFocused = Focus.of(context).hasFocus;
-                return Container(
-                  height: 38,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1D34),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isFocused ? const Color(0xFF6366F1) : const Color(0xFF2E2B52),
+            child: Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1D34),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2E2B52)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, color: Color(0xFF8F92A9), size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: l10n.search,
+                        hintStyle: const TextStyle(color: Color(0xFF8F92A9), fontSize: 13),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
+                        _filterContent();
+                      },
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search, color: Color(0xFF8F92A9), size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                          decoration: InputDecoration(
-                            hintText: l10n.search,
-                            hintStyle: const TextStyle(color: Color(0xFF8F92A9), fontSize: 13),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (value) {
-                            setState(() => _searchQuery = value);
-                            _filterContent();
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+                ],
+              ),
             ),
           ),
 
-          // Categories List
           Expanded(
             child: ListView.builder(
               itemCount: _hierarchy.length + 1,
@@ -352,58 +326,53 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
 
   Widget _buildCategoryTile(String title, bool isSelected, VoidCallback onTap, {bool hasSub = false, bool isSub = false}) {
     bool isHovered = false;
-    final focusNode = FocusNode();
 
     return StatefulBuilder(
       builder: (context, setState) {
-        final isFocused = focusNode.hasFocus;
-        final active = isSelected || isFocused || isHovered;
+        final active = isSelected || isHovered;
 
-        return Focus(
-          focusNode: focusNode,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isHovered = true),
-            onExit: (_) => setState(() => isHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: InkWell(
-              onTap: onTap,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: isSub ? 10 : 14,
-                ),
-                decoration: BoxDecoration(
-                  color: active ? const Color(0xFF23223F) : Colors.transparent,
-                  border: Border(
-                    left: BorderSide(
-                      color: active ? const Color(0xFF6366F1) : Colors.transparent,
-                      width: 3,
-                    ),
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          cursor: SystemMouseCursors.click,
+          child: InkWell(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: isSub ? 10 : 14,
+              ),
+              decoration: BoxDecoration(
+                color: active ? const Color(0xFF23223F) : Colors.transparent,
+                border: Border(
+                  left: BorderSide(
+                    color: active ? const Color(0xFF6366F1) : Colors.transparent,
+                    width: 3,
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: active ? Colors.white : const Color(0xFF8F92A9),
-                          fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                          fontSize: isSub ? 13 : 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: active ? Colors.white : const Color(0xFF8F92A9),
+                        fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                        fontSize: isSub ? 13 : 14,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (hasSub)
-                      Icon(
-                        isSelected ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                        size: 18,
-                        color: active ? const Color(0xFF818CF8) : const Color(0xFF8F92A9),
-                      ),
-                  ],
-                ),
+                  ),
+                  if (hasSub)
+                    Icon(
+                      isSelected ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                      size: 18,
+                      color: active ? const Color(0xFF818CF8) : const Color(0xFF8F92A9),
+                    ),
+                ],
               ),
             ),
           ),
@@ -598,70 +567,63 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
 
   Widget _buildContentCard(Channel content, {required double width, bool showProgress = false}) {
     bool isHovered = false;
-    final itemFocusNode = FocusNode();
 
     return StatefulBuilder(
       builder: (context, setState) {
-        final isFocused = itemFocusNode.hasFocus;
-        final active = isFocused || isHovered;
-
-        return Focus(
-          focusNode: itemFocusNode,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => isHovered = true),
-            onExit: (_) => setState(() => isHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: Container(
-              width: width,
-              margin: const EdgeInsets.only(right: 14),
-              child: InkWell(
-                onTap: () => _showDetails(content),
-                borderRadius: BorderRadius.circular(12),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  transform: active ? Matrix4.translationValues(0.0, -3.0, 0.0) : Matrix4.identity(),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1B1A32),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: active ? const Color(0xFF6366F1) : const Color(0xFF2C2A4C),
-                      width: active ? 2 : 1,
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: width,
+            margin: const EdgeInsets.only(right: 14),
+            child: InkWell(
+              onTap: () => _showDetails(content),
+              borderRadius: BorderRadius.circular(12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                transform: isHovered ? Matrix4.translationValues(0.0, -3.0, 0.0) : Matrix4.identity(),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B1A32),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isHovered ? const Color(0xFF6366F1) : const Color(0xFF2C2A4C),
+                    width: isHovered ? 2 : 1,
+                  ),
+                  boxShadow: isHovered
+                      ? [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.3), blurRadius: 16)]
+                      : [],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        child: content.logo != null && content.logo!.isNotEmpty
+                            ? Image.network(
+                                content.logo!,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
+                              )
+                            : const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
+                      ),
                     ),
-                    boxShadow: active
-                        ? [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.3), blurRadius: 16)]
-                        : [],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                          child: content.logo != null && content.logo!.isNotEmpty
-                              ? Image.network(
-                                  content.logo!,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
-                                )
-                              : const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Text(
+                        content.name,
+                        style: TextStyle(
+                          color: isHovered ? Colors.white : const Color(0xFFCBD5E1),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Text(
-                          content.name,
-                          style: TextStyle(
-                            color: active ? Colors.white : const Color(0xFFCBD5E1),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -678,7 +640,9 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
     for (final parent in parents.take(6)) {
       final subs = _hierarchy[parent]!;
       List<Channel> items = [];
-      subs.values.forEach((list) => items.addAll(list));
+      for (final list in subs.values) {
+        items.addAll(list);
+      }
 
       if (items.isNotEmpty) {
         sections.add(_buildSectionHeader(parent, Icons.category));
@@ -702,51 +666,6 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
       itemBuilder: (context, index) {
         return _buildContentCard(_filteredContent[index], width: 160);
       },
-    );
-  }
-
-  Widget _buildFocusIconButton({
-    required FocusNode focusNode,
-    required IconData icon,
-    required VoidCallback onTap,
-    required String tooltip,
-  }) {
-    bool isHovered = false;
-
-    return Focus(
-      focusNode: focusNode,
-      child: StatefulBuilder(
-        builder: (context, setState) {
-          final isFocused = Focus.of(context).hasFocus;
-          final active = isFocused || isHovered;
-
-          return MouseRegion(
-            onEnter: (_) => setState(() => isHovered = true),
-            onExit: (_) => setState(() => isHovered = false),
-            cursor: SystemMouseCursors.click,
-            child: Tooltip(
-              message: tooltip,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(10),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: active ? const Color(0xFF282645) : const Color(0xFF1E1D34),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: active ? const Color(0xFF6366F1) : const Color(0xFF2E2B52),
-                    ),
-                  ),
-                  child: Icon(icon, color: active ? Colors.white : const Color(0xFF8F92A9), size: 18),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 
