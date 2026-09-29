@@ -1,0 +1,14 @@
+{
+  "project_type": "flutter_rust",
+  "rules": [
+    "Never execute synchronous file reads or large regex parses inside Dart UI widgets.",
+    "All IPTV data models (Channels, EPG Programs, Categories) should have corresponding Rust structs and FFI mappings.",
+    "Always use 'media_kit' for media player instances and ensure custom HTTP headers (User-Agent, MAC portal authorization tokens) are attached to the media player source initialization.",
+    "Ensure all TV UI components account for spatial D-Pad focus by styling focus states explicitly with scale or visual border indicators.",
+    "Use SQLite with FTS5 virtual tables for all channel and EPG program queries to guarantee instant search performance."
+  ],
+  "file_triggers": {
+    "lib/**/*.dart": "Ensure code adheres to Flutter best practices, riverpod state management, and virtualized list views.",
+    "rust/**/*.rs": "Ensure Rust code is zero-cost, thread-safe, and uses flutter_rust_bridge macros correctly."
+  }
+}

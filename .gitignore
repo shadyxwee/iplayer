@@ -15,5 +15,9 @@ web/
 windows/
 .idea/
 .dart_tool/
-
-
+target/
+rust/target/
+**/target/
+*.so
+*.dylib
+*.dll

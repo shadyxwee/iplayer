@@ -144,13 +144,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         }
       });
 
+      final Map<String, String> headers = {
+        'User-Agent': widget.channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
+        'Connection': 'keep-alive',
+      };
+      if (widget.channel.referer != null) {
+        headers['Referer'] = widget.channel.referer!;
+      }
+
       await newPlayer.open(
         Media(
           widget.channel.url,
-          httpHeaders: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
-            'Connection': 'keep-alive',
-          },
+          httpHeaders: headers,
         ),
         play: true,
       );
