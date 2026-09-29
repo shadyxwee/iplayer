@@ -1,5 +1,6 @@
 use crate::db::EpgProgramRecord;
 use anyhow::{Context, Result};
+use chrono::NaiveDateTime;
 use flate2::read::GzDecoder;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
@@ -130,18 +131,10 @@ impl EpgParser {
     fn parse_xmltv_date(date_str: &str) -> i64 {
         let clean_str: String = date_str.chars().filter(|c| c.is_ascii_digit()).collect();
         if clean_str.len() >= 14 {
-            let year: i32 = clean_str[0..4].parse().unwrap_or(1970);
-            let month: u32 = clean_str[4..6].parse().unwrap_or(1);
-            let day: u32 = clean_str[6..8].parse().unwrap_or(1);
-            let hour: u32 = clean_str[8..10].parse().unwrap_or(0);
-            let min: u32 = clean_str[10..12].parse().unwrap_or(0);
-            let sec: u32 = clean_str[12..14].parse().unwrap_or(0);
-
-            let days_since_epoch = (year - 1970) as i64 * 365 + (month as i64 * 30) + day as i64;
-            let seconds = days_since_epoch * 86400 + (hour as i64 * 3600) + (min as i64 * 60) + sec as i64;
-            seconds
-        } else {
-            0
+            if let Ok(dt) = NaiveDateTime::parse_from_str(&clean_str[0..14], "%Y%m%d%H%M%S") {
+                return dt.and_utc().timestamp();
+            }
         }
+        0
     }
 }

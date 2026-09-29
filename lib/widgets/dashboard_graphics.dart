@@ -35,7 +35,7 @@ class _TvGraphicPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(const Offset(36, 16), 3, antennaTipPaint);
-    canvas.drawCircle(const Offset(84, 16), 3, antennaTipTipPaint);
+    canvas.drawCircle(const Offset(84, 16), 3, antennaTipPaint);
 
     // TV Outer Frame Body
     final framePaint = Paint()
@@ -89,10 +89,6 @@ class _TvGraphicPainter extends CustomPainter {
 
     canvas.restore();
   }
-
-  Paint get antennaTipTipPaint => Paint()
-    ..color = const Color(0xFF8C8FA9)
-    ..style = PaintingStyle.fill;
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;

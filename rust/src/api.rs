@@ -1,4 +1,4 @@
-use crate::db::{ChannelRecord, DbEngine, EpgProgramRecord};
+use crate::db::{ChannelRecord, DbEngine, EpgProgramRecord, PlaylistRecord};
 use crate::epg::EpgParser;
 use crate::m3u::M3uParser;
 use crate::stalker::{StalkerConfig, StalkerEngine, StreamDetails};
@@ -21,6 +21,81 @@ pub fn init_in_memory_db() -> Result<bool> {
     let engine = DbEngine::open_in_memory()?;
     *GLOBAL_DB.write() = Some(Arc::new(engine));
     Ok(true)
+}
+
+pub fn add_playlist(name: String, url_or_path: String, playlist_type: String) -> Result<i64> {
+    let pl = PlaylistRecord {
+        id: None,
+        name,
+        url_or_path,
+        playlist_type,
+        mac_address: None,
+        username: None,
+        password: None,
+        created_at: chrono::Utc::now().timestamp(),
+    };
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.add_playlist(&pl)
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn get_playlists() -> Result<Vec<PlaylistRecord>> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.get_playlists()
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn delete_playlist(id: i64) -> Result<bool> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.delete_playlist(id)?;
+        Ok(true)
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn toggle_favorite(channel_id: i64) -> Result<bool> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.toggle_favorite(channel_id)
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn get_favorites() -> Result<Vec<ChannelRecord>> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.get_favorites()
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn update_play_progress(channel_id: i64, watched_ms: i64, total_ms: i64) -> Result<bool> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.update_play_progress(channel_id, watched_ms, total_ms)?;
+        Ok(true)
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
+}
+
+pub fn get_channels_by_type(content_type: String) -> Result<Vec<ChannelRecord>> {
+    let db_guard = GLOBAL_DB.read();
+    if let Some(db) = db_guard.as_ref() {
+        db.get_channels_by_type(&content_type)
+    } else {
+        anyhow::bail!("Database not initialized");
+    }
 }
 
 pub fn parse_m3u_string(content: String, playlist_id: i64) -> Vec<ChannelRecord> {

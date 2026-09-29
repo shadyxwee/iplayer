@@ -120,6 +120,12 @@ impl M3uParser {
             tvg_name,
             content_type,
             is_favorite: false,
+            play_count: 0,
+            last_played: None,
+            rating: 0.0,
+            description: None,
+            watched_ms: 0,
+            total_ms: 0,
             user_agent,
             referer,
         }

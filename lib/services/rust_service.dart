@@ -14,7 +14,7 @@ class RustService {
     try {
       _initialized = true;
     } catch (e) {
-      // Logging fallback
+      // Fallback
     }
   }
 
