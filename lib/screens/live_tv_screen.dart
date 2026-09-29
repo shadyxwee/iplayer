@@ -542,7 +542,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           Expanded(
             child: ListView.builder(
               controller: _categoryScrollController,
-              padding: const EdgeInsets.vertical(8),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: _categories.length,
               itemBuilder: (context, index) {
                 final category = _categories[index];
@@ -733,7 +733,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                           alignment: Alignment.center,
                           child: Text(
                             '${channel.number ?? index + 1}',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.black),
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -747,7 +747,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                 style: TextStyle(
                                   color: isSelected || isFocused ? Colors.white : const Color(0xFFCFD3E3),
                                   fontSize: 12,
-                                  fontWeight: isSelected || isFocused ? FontWeight.semibold : FontWeight.normal,
+                                  fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.normal,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -811,7 +811,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                       children: [
                         Text(
                           _selectedChannel?.name ?? 'Canal 13',
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.semibold),
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                         ),
                         Text(
                           (_selectedChannel?.group ?? 'Chile').toUpperCase(),
