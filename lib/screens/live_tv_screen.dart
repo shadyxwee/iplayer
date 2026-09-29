@@ -11,7 +11,17 @@ import '../services/database_service.dart';
 
 enum NavigationZone { categories, channels, playerSurface, playerControls }
 
-enum PlayerControlTarget { playPause, volumeDown, volumeMute, volumeUp, subtitles, favorite, fullscreen }
+enum PlayerControlTarget {
+  playPrevious,
+  playPause,
+  playNext,
+  fullscreen,
+  volumeDown,
+  volumeMute,
+  volumeUp,
+  subtitles,
+  favorite,
+}
 
 class LiveTVScreen extends StatefulWidget {
   const LiveTVScreen({super.key});
@@ -29,6 +39,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
   // Focus & Scroll Controllers
   final FocusNode _screenFocusNode = FocusNode();
+  final FocusNode _keyboardListenerFocusNode = FocusNode();
   final FocusNode _searchFocusNode = FocusNode();
   final ScrollController _categoryScrollController = ScrollController();
   final ScrollController _channelScrollController = ScrollController();
@@ -69,7 +80,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   void _startHideControlsTimer() {
     _hideControlsTimer?.cancel();
     _hideControlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _isControlsVisible && !_screenFocusNode.hasFocus) {
+      if (mounted && _isControlsVisible) {
         setState(() {
           _isControlsVisible = false;
         });
@@ -90,8 +101,18 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     final channels = await DatabaseService.getAllChannels();
     final liveChannels = channels.where((c) => c.contentType == ContentType.live).toList();
 
-    final categorySet = <String>{'All'};
+    // Deduplicate channels by name
+    final seenNames = <String>{};
+    final uniqueLiveChannels = <Channel>[];
     for (final c in liveChannels) {
+      if (!seenNames.contains(c.name.toLowerCase())) {
+        seenNames.add(c.name.toLowerCase());
+        uniqueLiveChannels.add(c);
+      }
+    }
+
+    final categorySet = <String>{'All'};
+    for (final c in uniqueLiveChannels) {
       if (c.group != null && c.group!.isNotEmpty) {
         categorySet.add(c.group!);
       }
@@ -99,7 +120,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
     final categories = categorySet.toList();
 
-    List<Channel> displayChannels = liveChannels;
+    List<Channel> displayChannels = uniqueLiveChannels;
     if (displayChannels.isEmpty) {
       displayChannels = _generateSampleChannels();
     }
@@ -139,9 +160,8 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
   void _onChannelFocusChanged(int newIndex) {
     _focusedChannelIndex = newIndex;
-    _ensureVisibleChannel(_focusedChannelIndex);
+    _ensureVisibleChannelCentered(_focusedChannelIndex);
 
-    // Debounced Autoplay: play automatically when user navigates without pressing Enter/OK
     _autoplayDebounceTimer?.cancel();
     _autoplayDebounceTimer = Timer(const Duration(milliseconds: 400), () {
       if (mounted && _focusedChannelIndex < _filteredChannels.length) {
@@ -157,7 +177,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   }
 
   Future<void> _initPlayerForChannel(Channel channel) async {
-    // Dispose previous player to avoid native memory/resource leaks
     _player?.dispose();
     _player = null;
     _controller = null;
@@ -222,10 +241,44 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           .toList();
     }
 
+    // Deduplicate
+    final seen = <String>{};
+    final uniqueList = <Channel>[];
+    for (final c in filtered) {
+      if (!seen.contains(c.name.toLowerCase())) {
+        seen.add(c.name.toLowerCase());
+        uniqueList.add(c);
+      }
+    }
+
     setState(() {
-      _filteredChannels = filtered;
+      _filteredChannels = uniqueList;
       _focusedChannelIndex = 0;
     });
+  }
+
+  void _playPreviousChannel() {
+    if (_filteredChannels.isEmpty) return;
+    final currentIndex = _filteredChannels.indexWhere((c) => c.name == _selectedChannel?.name);
+    final prevIndex = (currentIndex - 1 + _filteredChannels.length) % _filteredChannels.length;
+    setState(() {
+      _focusedChannelIndex = prevIndex;
+      _selectedChannel = _filteredChannels[prevIndex];
+      _ensureVisibleChannelCentered(prevIndex);
+    });
+    _initPlayerForChannel(_selectedChannel!);
+  }
+
+  void _playNextChannel() {
+    if (_filteredChannels.isEmpty) return;
+    final currentIndex = _filteredChannels.indexWhere((c) => c.name == _selectedChannel?.name);
+    final nextIndex = (currentIndex + 1) % _filteredChannels.length;
+    setState(() {
+      _focusedChannelIndex = nextIndex;
+      _selectedChannel = _filteredChannels[nextIndex];
+      _ensureVisibleChannelCentered(nextIndex);
+    });
+    _initPlayerForChannel(_selectedChannel!);
   }
 
   // --- D-Pad Spatial Navigation Dispatcher ---
@@ -324,7 +377,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
         case NavigationZone.playerSurface:
         case NavigationZone.playerControls:
-          if (_currentZone == NavigationZone.playerControls && _focusedControl != PlayerControlTarget.playPause) {
+          if (_currentZone == NavigationZone.playerControls && _focusedControl != PlayerControlTarget.playPrevious) {
             final prevIndex = PlayerControlTarget.values.indexOf(_focusedControl) - 1;
             if (prevIndex >= 0) {
               _focusedControl = PlayerControlTarget.values[prevIndex];
@@ -395,8 +448,20 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
   void _executeControlAction(PlayerControlTarget target) {
     switch (target) {
+      case PlayerControlTarget.playPrevious:
+        _playPreviousChannel();
+        break;
+
       case PlayerControlTarget.playPause:
         _player?.playOrPause();
+        break;
+
+      case PlayerControlTarget.playNext:
+        _playNextChannel();
+        break;
+
+      case PlayerControlTarget.fullscreen:
+        _toggleFullscreen();
         break;
 
       case PlayerControlTarget.volumeDown:
@@ -436,10 +501,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           DatabaseService.toggleFavorite(_selectedChannel!);
           setState(() {});
         }
-        break;
-
-      case PlayerControlTarget.fullscreen:
-        _toggleFullscreen();
         break;
     }
   }
@@ -482,10 +543,15 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     }
   }
 
-  void _ensureVisibleChannel(int index) {
+  /// Centers the focused/selected channel in the viewport until top/bottom bounds
+  void _ensureVisibleChannelCentered(int index) {
     if (_channelScrollController.hasClients) {
+      const itemHeight = 48.0;
+      final viewportHeight = _channelScrollController.position.viewportDimension;
+      final targetOffset = (index * itemHeight) - (viewportHeight / 2) + (itemHeight / 2);
+
       _channelScrollController.animateTo(
-        (index * 48.0).clamp(0.0, _channelScrollController.position.maxScrollExtent),
+        targetOffset.clamp(0.0, _channelScrollController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
       );
@@ -497,6 +563,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     _autoplayDebounceTimer?.cancel();
     _hideControlsTimer?.cancel();
     _screenFocusNode.dispose();
+    _keyboardListenerFocusNode.dispose();
     _searchFocusNode.dispose();
     _categoryScrollController.dispose();
     _channelScrollController.dispose();
@@ -529,7 +596,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           focusNode: _screenFocusNode,
           autofocus: true,
           child: KeyboardListener(
-            focusNode: FocusNode(),
+            focusNode: _keyboardListenerFocusNode,
             onKeyEvent: _handleKeyEvent,
             child: Scaffold(
               backgroundColor: const Color(0xFF0B0C13),
@@ -565,7 +632,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       ),
       child: Column(
         children: [
-          // Top Header / LIVE TV Pill
           Container(
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -601,7 +667,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
             ),
           ),
 
-          // Category Scroll List
           Expanded(
             child: ListView.builder(
               controller: _categoryScrollController,
@@ -670,7 +735,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       ),
       child: Column(
         children: [
-          // Search Bar
           Container(
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -723,7 +787,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
             ),
           ),
 
-          // Channel Rows List
           Expanded(
             child: ListView.builder(
               controller: _channelScrollController,
@@ -783,7 +846,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        // Channel Logo display with fallback
                         Container(
                           width: 28,
                           height: 28,
@@ -847,7 +909,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     );
   }
 
-  // --- Zone C: Main Player Viewport & Dynamic OSD ---
+  // --- Zone C: Main Player Viewport & Exact OSD Ribbon Flow ---
   Widget _buildMainPlayerViewport() {
     return Container(
       color: Colors.black,
@@ -900,7 +962,8 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
               ),
             ),
 
-          // Bottom Dynamic Control Ribbon Overlay
+          // Bottom Control Ribbon Overlay
+          // Exact Flow: Play Previous | Play/Pause | Play Next | Full Screen Button | Sound Manage | Subtitle On/Off | Love Icon
           Positioned(
             bottom: 0,
             left: 0,
@@ -932,7 +995,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                               final dur = durSnapshot.data ?? Duration.zero;
                               final progress = dur.inMilliseconds > 0
                                   ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
-                                  : 1.0; // Full red bar for live streams
+                                  : 1.0;
 
                               return Column(
                                 children: [
@@ -971,39 +1034,50 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
                     const SizedBox(height: 10),
 
-                    // Controls Row
+                    // Controls Row with Exact Sequence Requirements
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Left Controls: Play, LIVE pill, Sound Controls (vol -, mute, vol +)
+                        // Left Cluster: Play Previous | Play/Pause | Play Next | Full Screen
                         Row(
                           children: [
+                            // 1. Play Previous Channel
+                            _buildControlButton(
+                              target: PlayerControlTarget.playPrevious,
+                              icon: Icons.skip_previous,
+                              onTap: _playPreviousChannel,
+                            ),
+                            const SizedBox(width: 8),
+
+                            // 2. Play / Pause
                             _buildControlButton(
                               target: PlayerControlTarget.playPause,
                               icon: Icons.pause,
                               onTap: () => _player?.playOrPause(),
                             ),
-                            const SizedBox(width: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE5283B).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFFE5283B).withValues(alpha: 0.4)),
-                              ),
-                              child: const Row(
-                                children: [
-                                  CircleAvatar(radius: 3, backgroundColor: Color(0xFFE5283B)),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'EN VIVO',
-                                    style: TextStyle(color: Color(0xFFE5283B), fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(width: 8),
+
+                            // 3. Play Next Channel
+                            _buildControlButton(
+                              target: PlayerControlTarget.playNext,
+                              icon: Icons.skip_next,
+                              onTap: _playNextChannel,
                             ),
-                            const SizedBox(width: 16),
-                            // Sound Controls
+                            const SizedBox(width: 12),
+
+                            // 4. Full Screen Button
+                            _buildControlButton(
+                              target: PlayerControlTarget.fullscreen,
+                              icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                              onTap: _toggleFullscreen,
+                            ),
+                          ],
+                        ),
+
+                        // Right Cluster: Sound Manage | Subtitle On/Off | Love Icon
+                        Row(
+                          children: [
+                            // 5. Sound Manage (- , Mute , +)
                             _buildControlButton(
                               target: PlayerControlTarget.volumeDown,
                               icon: Icons.remove,
@@ -1036,12 +1110,9 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                 });
                               },
                             ),
-                          ],
-                        ),
+                            const SizedBox(width: 12),
 
-                        // Right Controls: Subtitle Toggle (On/Off), Favorite, Fullscreen
-                        Row(
-                          children: [
+                            // 6. Subtitle On/Off
                             _buildControlButton(
                               target: PlayerControlTarget.subtitles,
                               icon: _subtitlesEnabled ? Icons.subtitles : Icons.subtitles_off,
@@ -1058,7 +1129,9 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                 });
                               },
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
+
+                            // 7. Love Icon (Favorite)
                             _buildControlButton(
                               target: PlayerControlTarget.favorite,
                               icon: _selectedChannel?.isFavorite == true ? Icons.favorite : Icons.favorite_border,
@@ -1069,12 +1142,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                   setState(() {});
                                 }
                               },
-                            ),
-                            const SizedBox(width: 8),
-                            _buildControlButton(
-                              target: PlayerControlTarget.fullscreen,
-                              icon: _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                              onTap: _toggleFullscreen,
                             ),
                           ],
                         ),
