@@ -78,33 +78,43 @@ const ChannelSchema = CollectionSchema(
       name: r'rating',
       type: IsarType.double,
     ),
-    r'totalMilliseconds': PropertySchema(
+    r'referer': PropertySchema(
       id: 12,
+      name: r'referer',
+      type: IsarType.string,
+    ),
+    r'totalMilliseconds': PropertySchema(
+      id: 13,
       name: r'totalMilliseconds',
       type: IsarType.long,
     ),
     r'tvgId': PropertySchema(
-      id: 13,
+      id: 14,
       name: r'tvgId',
       type: IsarType.long,
     ),
     r'tvgLogo': PropertySchema(
-      id: 14,
+      id: 15,
       name: r'tvgLogo',
       type: IsarType.string,
     ),
     r'tvgName': PropertySchema(
-      id: 15,
+      id: 16,
       name: r'tvgName',
       type: IsarType.string,
     ),
     r'url': PropertySchema(
-      id: 16,
+      id: 17,
       name: r'url',
       type: IsarType.string,
     ),
+    r'userAgent': PropertySchema(
+      id: 18,
+      name: r'userAgent',
+      type: IsarType.string,
+    ),
     r'watchedMilliseconds': PropertySchema(
-      id: 17,
+      id: 19,
       name: r'watchedMilliseconds',
       type: IsarType.long,
     )
@@ -195,6 +205,12 @@ int _channelEstimateSize(
   }
   bytesCount += 3 + object.name.length * 3;
   {
+    final value = object.referer;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
+  {
     final value = object.tvgLogo;
     if (value != null) {
       bytesCount += 3 + value.length * 3;
@@ -207,6 +223,12 @@ int _channelEstimateSize(
     }
   }
   bytesCount += 3 + object.url.length * 3;
+  {
+    final value = object.userAgent;
+    if (value != null) {
+      bytesCount += 3 + value.length * 3;
+    }
+  }
   return bytesCount;
 }
 
@@ -228,12 +250,14 @@ void _channelSerialize(
   writer.writeLong(offsets[9], object.playCount);
   writer.writeLong(offsets[10], object.playlistId);
   writer.writeDouble(offsets[11], object.rating);
-  writer.writeLong(offsets[12], object.totalMilliseconds);
-  writer.writeLong(offsets[13], object.tvgId);
-  writer.writeString(offsets[14], object.tvgLogo);
-  writer.writeString(offsets[15], object.tvgName);
-  writer.writeString(offsets[16], object.url);
-  writer.writeLong(offsets[17], object.watchedMilliseconds);
+  writer.writeString(offsets[12], object.referer);
+  writer.writeLong(offsets[13], object.totalMilliseconds);
+  writer.writeLong(offsets[14], object.tvgId);
+  writer.writeString(offsets[15], object.tvgLogo);
+  writer.writeString(offsets[16], object.tvgName);
+  writer.writeString(offsets[17], object.url);
+  writer.writeString(offsets[18], object.userAgent);
+  writer.writeLong(offsets[19], object.watchedMilliseconds);
 }
 
 Channel _channelDeserialize(
@@ -258,12 +282,14 @@ Channel _channelDeserialize(
   object.playCount = reader.readLong(offsets[9]);
   object.playlistId = reader.readLongOrNull(offsets[10]);
   object.rating = reader.readDouble(offsets[11]);
-  object.totalMilliseconds = reader.readLong(offsets[12]);
-  object.tvgId = reader.readLongOrNull(offsets[13]);
-  object.tvgLogo = reader.readStringOrNull(offsets[14]);
-  object.tvgName = reader.readStringOrNull(offsets[15]);
-  object.url = reader.readString(offsets[16]);
-  object.watchedMilliseconds = reader.readLong(offsets[17]);
+  object.referer = reader.readStringOrNull(offsets[12]);
+  object.totalMilliseconds = reader.readLong(offsets[13]);
+  object.tvgId = reader.readLongOrNull(offsets[14]);
+  object.tvgLogo = reader.readStringOrNull(offsets[15]);
+  object.tvgName = reader.readStringOrNull(offsets[16]);
+  object.url = reader.readString(offsets[17]);
+  object.userAgent = reader.readStringOrNull(offsets[18]);
+  object.watchedMilliseconds = reader.readLong(offsets[19]);
   return object;
 }
 
@@ -300,16 +326,20 @@ P _channelDeserializeProp<P>(
     case 11:
       return (reader.readDouble(offset)) as P;
     case 12:
-      return (reader.readLong(offset)) as P;
-    case 13:
-      return (reader.readLongOrNull(offset)) as P;
-    case 14:
       return (reader.readStringOrNull(offset)) as P;
+    case 13:
+      return (reader.readLong(offset)) as P;
+    case 14:
+      return (reader.readLongOrNull(offset)) as P;
     case 15:
       return (reader.readStringOrNull(offset)) as P;
     case 16:
-      return (reader.readString(offset)) as P;
+      return (reader.readStringOrNull(offset)) as P;
     case 17:
+      return (reader.readString(offset)) as P;
+    case 18:
+      return (reader.readStringOrNull(offset)) as P;
+    case 19:
       return (reader.readLong(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -1857,6 +1887,152 @@ extension ChannelQueryFilter
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'referer',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'referer',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'referer',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'referer',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'referer',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'referer',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> refererIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'referer',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterFilterCondition>
       totalMillisecondsEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
@@ -2404,6 +2580,152 @@ extension ChannelQueryFilter
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'userAgent',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'userAgent',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentEqualTo(
+    String? value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentGreaterThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentLessThan(
+    String? value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentBetween(
+    String? lower,
+    String? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'userAgent',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'userAgent',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'userAgent',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'userAgent',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterFilterCondition> userAgentIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'userAgent',
+        value: '',
+      ));
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterFilterCondition>
       watchedMillisecondsEqualTo(int value) {
     return QueryBuilder.apply(this, (query) {
@@ -2612,6 +2934,18 @@ extension ChannelQuerySortBy on QueryBuilder<Channel, Channel, QSortBy> {
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByReferer() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referer', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByRefererDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referer', Sort.desc);
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterSortBy> sortByTotalMilliseconds() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'totalMilliseconds', Sort.asc);
@@ -2669,6 +3003,18 @@ extension ChannelQuerySortBy on QueryBuilder<Channel, Channel, QSortBy> {
   QueryBuilder<Channel, Channel, QAfterSortBy> sortByUrlDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'url', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByUserAgent() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'userAgent', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> sortByUserAgentDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'userAgent', Sort.desc);
     });
   }
 
@@ -2843,6 +3189,18 @@ extension ChannelQuerySortThenBy
     });
   }
 
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByReferer() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referer', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByRefererDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'referer', Sort.desc);
+    });
+  }
+
   QueryBuilder<Channel, Channel, QAfterSortBy> thenByTotalMilliseconds() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'totalMilliseconds', Sort.asc);
@@ -2900,6 +3258,18 @@ extension ChannelQuerySortThenBy
   QueryBuilder<Channel, Channel, QAfterSortBy> thenByUrlDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'url', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByUserAgent() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'userAgent', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QAfterSortBy> thenByUserAgentDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'userAgent', Sort.desc);
     });
   }
 
@@ -2995,6 +3365,13 @@ extension ChannelQueryWhereDistinct
     });
   }
 
+  QueryBuilder<Channel, Channel, QDistinct> distinctByReferer(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'referer', caseSensitive: caseSensitive);
+    });
+  }
+
   QueryBuilder<Channel, Channel, QDistinct> distinctByTotalMilliseconds() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'totalMilliseconds');
@@ -3025,6 +3402,13 @@ extension ChannelQueryWhereDistinct
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'url', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<Channel, Channel, QDistinct> distinctByUserAgent(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'userAgent', caseSensitive: caseSensitive);
     });
   }
 
@@ -3115,6 +3499,12 @@ extension ChannelQueryProperty
     });
   }
 
+  QueryBuilder<Channel, String?, QQueryOperations> refererProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'referer');
+    });
+  }
+
   QueryBuilder<Channel, int, QQueryOperations> totalMillisecondsProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'totalMilliseconds');
@@ -3142,6 +3532,12 @@ extension ChannelQueryProperty
   QueryBuilder<Channel, String, QQueryOperations> urlProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'url');
+    });
+  }
+
+  QueryBuilder<Channel, String?, QQueryOperations> userAgentProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'userAgent');
     });
   }
 

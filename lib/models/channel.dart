@@ -21,6 +21,8 @@ class Channel {
   String? tvgName;
   String? tvgLogo;
   String? groupTitle;
+  String? userAgent;
+  String? referer;
   @Index()
   bool isFavorite = false;
   int playCount = 0;
@@ -148,7 +150,6 @@ class Channel {
     channel.url = url.trim();
 
     // Parse EXTINF line
-    // Format: #EXTINF:-1 tvg-id="..." tvg-name="..." tvg-logo="..." group-title="...",Channel Name
     final nameMatch = RegExp(r',(.+)$').firstMatch(line);
     channel.name = nameMatch?.group(1)?.trim() ?? 'Unknown Channel';
 
@@ -183,6 +184,8 @@ class Channel {
         'tvgName': tvgName,
         'tvgLogo': tvgLogo,
         'groupTitle': groupTitle,
+        'userAgent': userAgent,
+        'referer': referer,
         'isFavorite': isFavorite,
         'playCount': playCount,
         'lastPlayed': lastPlayed?.toIso8601String(),
