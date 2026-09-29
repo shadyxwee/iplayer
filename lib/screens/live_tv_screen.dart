@@ -11,7 +11,7 @@ import '../services/database_service.dart';
 
 enum NavigationZone { categories, channels, playerSurface, playerControls }
 
-enum PlayerControlTarget { playPause, volume, aspectRatio, favorite, fullscreen }
+enum PlayerControlTarget { playPause, volumeDown, volumeMute, volumeUp, subtitles, favorite, fullscreen }
 
 class LiveTVScreen extends StatefulWidget {
   const LiveTVScreen({super.key});
@@ -50,7 +50,10 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   String? _playerError;
   bool _isFullscreen = false;
   double _volume = 100.0;
-  String _aspectRatioMode = '16:9';
+  bool _subtitlesEnabled = true;
+
+  // Autoplay Debounce Timer
+  Timer? _autoplayDebounceTimer;
 
   // Controls Visibility & Auto-Hide Timer
   bool _isControlsVisible = true;
@@ -134,16 +137,40 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     });
   }
 
+  void _onChannelFocusChanged(int newIndex) {
+    _focusedChannelIndex = newIndex;
+    _ensureVisibleChannel(_focusedChannelIndex);
+
+    // Debounced Autoplay: play automatically when user navigates without pressing Enter/OK
+    _autoplayDebounceTimer?.cancel();
+    _autoplayDebounceTimer = Timer(const Duration(milliseconds: 400), () {
+      if (mounted && _focusedChannelIndex < _filteredChannels.length) {
+        final targetChannel = _filteredChannels[_focusedChannelIndex];
+        if (_selectedChannel?.name != targetChannel.name) {
+          setState(() {
+            _selectedChannel = targetChannel;
+          });
+          _initPlayerForChannel(targetChannel);
+        }
+      }
+    });
+  }
+
   Future<void> _initPlayerForChannel(Channel channel) async {
+    // Dispose previous player to avoid native memory/resource leaks
+    _player?.dispose();
+    _player = null;
+    _controller = null;
+
     setState(() {
       _isPlayerLoading = true;
       _playerError = null;
     });
 
-    try {
-      final newPlayer = Player();
-      final newController = VideoController(newPlayer);
+    final newPlayer = Player();
+    final newController = VideoController(newPlayer);
 
+    try {
       try {
         final dynamic native = newPlayer.platform;
         native.setProperty('cache-pause', 'yes');
@@ -163,11 +190,12 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
       if (mounted) {
         setState(() {
-          _player?.dispose();
           _player = newPlayer;
           _controller = newController;
           _isPlayerLoading = false;
         });
+      } else {
+        newPlayer.dispose();
       }
     } catch (e) {
       if (mounted) {
@@ -175,6 +203,8 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           _playerError = e.toString();
           _isPlayerLoading = false;
         });
+      } else {
+        newPlayer.dispose();
       }
     }
   }
@@ -202,7 +232,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
 
-    // Guard: ignore arrow navigation if typing in search input field
     if (_searchFocusNode.hasFocus) {
       if (event.logicalKey == LogicalKeyboardKey.escape) {
         _searchFocusNode.unfocus();
@@ -241,8 +270,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
         case NavigationZone.channels:
           if (_focusedChannelIndex > 0) {
-            _focusedChannelIndex--;
-            _ensureVisibleChannel(_focusedChannelIndex);
+            _onChannelFocusChanged(_focusedChannelIndex - 1);
           }
           break;
 
@@ -269,8 +297,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
         case NavigationZone.channels:
           if (_focusedChannelIndex < _filteredChannels.length - 1) {
-            _focusedChannelIndex++;
-            _ensureVisibleChannel(_focusedChannelIndex);
+            _onChannelFocusChanged(_focusedChannelIndex + 1);
           }
           break;
 
@@ -372,16 +399,35 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
         _player?.playOrPause();
         break;
 
-      case PlayerControlTarget.volume:
+      case PlayerControlTarget.volumeDown:
+        setState(() {
+          _volume = (_volume - 10.0).clamp(0.0, 100.0);
+          _player?.setVolume(_volume);
+        });
+        break;
+
+      case PlayerControlTarget.volumeMute:
         setState(() {
           _volume = _volume > 0 ? 0.0 : 100.0;
           _player?.setVolume(_volume);
         });
         break;
 
-      case PlayerControlTarget.aspectRatio:
+      case PlayerControlTarget.volumeUp:
         setState(() {
-          _aspectRatioMode = _aspectRatioMode == '16:9' ? '4:3' : '16:9';
+          _volume = (_volume + 10.0).clamp(0.0, 100.0);
+          _player?.setVolume(_volume);
+        });
+        break;
+
+      case PlayerControlTarget.subtitles:
+        setState(() {
+          _subtitlesEnabled = !_subtitlesEnabled;
+          if (_subtitlesEnabled) {
+            _player?.setSubtitleTrack(SubtitleTrack.auto());
+          } else {
+            _player?.setSubtitleTrack(SubtitleTrack.no());
+          }
         });
         break;
 
@@ -448,6 +494,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
   @override
   void dispose() {
+    _autoplayDebounceTimer?.cancel();
     _hideControlsTimer?.cancel();
     _screenFocusNode.dispose();
     _searchFocusNode.dispose();
@@ -456,6 +503,13 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     _searchController.dispose();
     _player?.dispose();
     super.dispose();
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
   }
 
   @override
@@ -467,28 +521,37 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       );
     }
 
-    return KeyboardListener(
-      focusNode: _screenFocusNode,
-      autofocus: true,
-      onKeyEvent: _handleKeyEvent,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF0B0C13),
-        body: MouseRegion(
-          onHover: (_) => _showControls(),
-          onEnter: (_) => _showControls(),
-          child: SafeArea(
-            child: Row(
-              children: [
-                if (!_isFullscreen) ...[
-                  _buildCategorySidebar(),
-                  _buildChannelColumn(),
-                ],
-                Expanded(child: _buildMainPlayerViewport()),
-              ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 768;
+
+        return Focus(
+          focusNode: _screenFocusNode,
+          autofocus: true,
+          child: KeyboardListener(
+            focusNode: FocusNode(),
+            onKeyEvent: _handleKeyEvent,
+            child: Scaffold(
+              backgroundColor: const Color(0xFF0B0C13),
+              body: MouseRegion(
+                onHover: (_) => _showControls(),
+                onEnter: (_) => _showControls(),
+                child: SafeArea(
+                  child: Row(
+                    children: [
+                      if (!_isFullscreen && !isNarrow) ...[
+                        _buildCategorySidebar(),
+                        _buildChannelColumn(),
+                      ],
+                      Expanded(child: _buildMainPlayerViewport()),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -607,7 +670,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       ),
       child: Column(
         children: [
-          // Search & Tools Bar
+          // Search Bar
           Container(
             height: 52,
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -653,10 +716,6 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.calendar_today, color: Color(0xFF707994), size: 16),
-                  onPressed: () {},
-                ),
-                IconButton(
                   icon: const Icon(Icons.refresh, color: Color(0xFF707994), size: 16),
                   onPressed: _loadData,
                 ),
@@ -673,6 +732,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 final channel = _filteredChannels[index];
                 final isSelected = _selectedChannel?.name == channel.name;
                 final isFocused = _currentZone == NavigationZone.channels && index == _focusedChannelIndex;
+                final logoUrl = channel.logo ?? channel.tvgLogo;
 
                 return InkWell(
                   onTap: () {
@@ -723,18 +783,23 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
+                        // Channel Logo display with fallback
                         Container(
-                          width: 26,
-                          height: 26,
+                          width: 28,
+                          height: 28,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE85817),
-                            borderRadius: BorderRadius.circular(4),
+                            color: const Color(0xFF1C1F30),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF2A2E45)),
                           ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${channel.number ?? index + 1}',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
-                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: logoUrl != null && logoUrl.isNotEmpty
+                              ? Image.network(
+                                  logoUrl,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => _buildChannelBadgeFallback(channel, index),
+                                )
+                              : _buildChannelBadgeFallback(channel, index),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -771,7 +836,18 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     );
   }
 
-  // --- Zone C: Main Player Viewport & OSD ---
+  Widget _buildChannelBadgeFallback(Channel channel, int index) {
+    return Container(
+      color: const Color(0xFFE85817),
+      alignment: Alignment.center,
+      child: Text(
+        '${channel.number ?? index + 1}',
+        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+
+  // --- Zone C: Main Player Viewport & Dynamic OSD ---
   Widget _buildMainPlayerViewport() {
     return Container(
       color: Colors.black,
@@ -793,7 +869,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                         : const SizedBox.shrink(),
           ),
 
-          // Header Overlay (Only when not fullscreen)
+          // Header Overlay
           if (!_isFullscreen)
             Positioned(
               top: 0,
@@ -824,7 +900,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
               ),
             ),
 
-          // Bottom Control Ribbon Overlay (Auto-hiding)
+          // Bottom Dynamic Control Ribbon Overlay
           Positioned(
             bottom: 0,
             left: 0,
@@ -844,29 +920,62 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Progress Bar
-                    Container(
-                      height: 4,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(2),
+                    // Dynamic Stream Progress Bar
+                    if (_player != null)
+                      StreamBuilder<Duration>(
+                        stream: _player!.stream.position,
+                        builder: (context, posSnapshot) {
+                          return StreamBuilder<Duration>(
+                            stream: _player!.stream.duration,
+                            builder: (context, durSnapshot) {
+                              final pos = posSnapshot.data ?? Duration.zero;
+                              final dur = durSnapshot.data ?? Duration.zero;
+                              final progress = dur.inMilliseconds > 0
+                                  ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+                                  : 1.0; // Full red bar for live streams
+
+                              return Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_formatDuration(pos), style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                                      Text(_formatDuration(dur), style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    height: 4,
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white12,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FractionallySizedBox(
+                                        widthFactor: progress,
+                                        child: Container(
+                                          height: 4,
+                                          color: const Color(0xFFE5283B),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
                       ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          height: 4,
-                          width: 200,
-                          color: const Color(0xFFE5283B),
-                        ),
-                      ),
-                    ),
+
                     const SizedBox(height: 10),
 
                     // Controls Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Left Controls: Play, LIVE pill, Sound Controls (vol -, mute, vol +)
                         Row(
                           children: [
                             _buildControlButton(
@@ -894,8 +1003,20 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
+                            // Sound Controls
                             _buildControlButton(
-                              target: PlayerControlTarget.volume,
+                              target: PlayerControlTarget.volumeDown,
+                              icon: Icons.remove,
+                              onTap: () {
+                                setState(() {
+                                  _volume = (_volume - 10.0).clamp(0.0, 100.0);
+                                  _player?.setVolume(_volume);
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                            _buildControlButton(
+                              target: PlayerControlTarget.volumeMute,
                               icon: _volume > 0 ? Icons.volume_up : Icons.volume_off,
                               onTap: () {
                                 setState(() {
@@ -904,18 +1025,36 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                                 });
                               },
                             ),
+                            const SizedBox(width: 4),
+                            _buildControlButton(
+                              target: PlayerControlTarget.volumeUp,
+                              icon: Icons.add,
+                              onTap: () {
+                                setState(() {
+                                  _volume = (_volume + 10.0).clamp(0.0, 100.0);
+                                  _player?.setVolume(_volume);
+                                });
+                              },
+                            ),
                           ],
                         ),
 
+                        // Right Controls: Subtitle Toggle (On/Off), Favorite, Fullscreen
                         Row(
                           children: [
                             _buildControlButton(
-                              target: PlayerControlTarget.aspectRatio,
-                              icon: Icons.aspect_ratio,
-                              label: _aspectRatioMode,
+                              target: PlayerControlTarget.subtitles,
+                              icon: _subtitlesEnabled ? Icons.subtitles : Icons.subtitles_off,
+                              label: _subtitlesEnabled ? 'SUB ON' : 'SUB OFF',
+                              color: _subtitlesEnabled ? const Color(0xFF00E5FF) : Colors.white54,
                               onTap: () {
                                 setState(() {
-                                  _aspectRatioMode = _aspectRatioMode == '16:9' ? '4:3' : '16:9';
+                                  _subtitlesEnabled = !_subtitlesEnabled;
+                                  if (_subtitlesEnabled) {
+                                    _player?.setSubtitleTrack(SubtitleTrack.auto());
+                                  } else {
+                                    _player?.setSubtitleTrack(SubtitleTrack.no());
+                                  }
                                 });
                               },
                             ),
