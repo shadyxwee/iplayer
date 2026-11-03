@@ -168,95 +168,25 @@ class VortexTubeService {
       }
     }
 
-    // Shelf 4: Favorite Movies
-    final favoriteMovies = nonLiveItems
-        .where((c) => c.contentType == ContentType.movie)
-        .toList();
-    if (favoriteMovies.isNotEmpty) {
-      favoriteMovies.sort((a, b) {
-        final scoreB = scoreItem(channel: b, lovedCategories: lovedCategories, now: now);
-        final scoreA = scoreItem(channel: a, lovedCategories: lovedCategories, now: now);
-        return scoreB.compareTo(scoreA);
-      });
-      shelves.add(VortexShelf(
-        title: 'Favorite Movies',
-        subtitle: 'Top rated & loved movies from your collections',
-        items: favoriteMovies.take(12).toList(),
-      ));
-    }
+    // Shelves 4+: Dedicated sections for the user's Actual Loved Categories
+    // Group loved categories into Movies and Series categories and list out all their contents
+    for (final lovedCat in lovedCategories) {
+      final catItems = nonLiveItems
+          .where((c) => c.group == lovedCat)
+          .toList();
 
-    // Shelf 5: Favorite Series & VOD Shows
-    final favoriteSeries = nonLiveItems
-        .where((c) => c.contentType == ContentType.series)
-        .toList();
-    if (favoriteSeries.isNotEmpty) {
-      favoriteSeries.sort((a, b) {
-        final scoreB = scoreItem(channel: b, lovedCategories: lovedCategories, now: now);
-        final scoreA = scoreItem(channel: a, lovedCategories: lovedCategories, now: now);
-        return scoreB.compareTo(scoreA);
-      });
-      shelves.add(VortexShelf(
-        title: 'Favorite Series & Shows',
-        subtitle: 'Bingeworthy series from your loved categories',
-        items: favoriteSeries.take(12).toList(),
-      ));
-    }
+      if (catItems.isNotEmpty) {
+        // Sort items in this loved category by score
+        catItems.sort((a, b) => scoreItem(channel: b, lovedCategories: lovedCategories, now: now)
+            .compareTo(scoreItem(channel: a, lovedCategories: lovedCategories, now: now)));
 
-    // Shelf 6: Because you love [Category] (top category with highest interactions)
-    if (lovedCategories.isNotEmpty) {
-      final catPlayCounts = <String, int>{};
-      for (final cat in lovedCategories) {
-        final count = nonLiveItems
-            .where((c) => c.group == cat)
-            .fold<int>(0, (sum, c) => sum + c.playCount);
-        catPlayCounts[cat] = count;
-      }
+        final isSeriesCategory = catItems.any((c) => c.contentType == ContentType.series);
+        final typeLabel = isSeriesCategory ? 'Series' : 'Movies';
 
-      final nonLiveLovedCategories = lovedCategories.where((cat) {
-        return nonLiveItems.any((c) => c.group == cat);
-      }).toList();
-
-      if (nonLiveLovedCategories.isNotEmpty) {
-        final topCategory = nonLiveLovedCategories.reduce((a, b) {
-          return (catPlayCounts[a] ?? 0) >= (catPlayCounts[b] ?? 0) ? a : b;
-        });
-
-        final categoryItems = nonLiveItems
-            .where((c) => c.group == topCategory)
-            .toList()
-          ..sort((a, b) => scoreItem(channel: b, lovedCategories: lovedCategories, now: now)
-              .compareTo(scoreItem(channel: a, lovedCategories: lovedCategories, now: now)));
-
-        if (categoryItems.isNotEmpty) {
-          shelves.add(VortexShelf(
-            title: 'Because you love $topCategory',
-            subtitle: 'Top handpicked titles in your favorite collection',
-            items: categoryItems.take(12).toList(),
-          ));
-        }
-      }
-    }
-
-    // Shelf 7: Top in your Favorites (explicitly loved items or highest rated)
-    final explicitFavorites = nonLiveItems.where((c) => c.isFavorite).toList();
-    if (explicitFavorites.isNotEmpty) {
-      explicitFavorites.sort((a, b) => b.rating.compareTo(a.rating));
-      shelves.add(VortexShelf(
-        title: 'Top in your Favorites',
-        subtitle: 'Your hand-picked loved movies and series',
-        items: explicitFavorites.take(12).toList(),
-      ));
-    } else {
-      final trending = nonLiveItems
-          .where((c) => c.rating >= 6.0 || c.playCount > 0)
-          .toList()
-        ..sort((a, b) => b.playCount.compareTo(a.playCount));
-
-      if (trending.isNotEmpty) {
         shelves.add(VortexShelf(
-          title: 'Trending in your Favorites',
-          subtitle: 'Most active content across your preferred categories',
-          items: trending.take(12).toList(),
+          title: '$lovedCat ($typeLabel)',
+          subtitle: 'All loved titles from $lovedCat',
+          items: catItems,
         ));
       }
     }

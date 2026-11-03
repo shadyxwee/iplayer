@@ -395,7 +395,6 @@ class StalkerService {
       for (var item in items) {
         final streamId = int.tryParse(item['id']?.toString() ?? '0') ?? 0;
         final name = item['name']?.toString() ?? 'Unknown Movie';
-        final rawCmd = item['cmd']?.toString() ?? '';
         final catId = item['category_id']?.toString() ?? '';
         final catName = categories[catId] ?? 'Movies';
         final poster = item['screenshot_uri']?.toString() ?? item['poster']?.toString();
