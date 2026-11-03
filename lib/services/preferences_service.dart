@@ -48,4 +48,27 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_parentalPinKey, pin);
   }
+
+  static const String _lastSelectedCategoryKey = 'last_selected_category';
+  static const String _lastFocusedChannelPrefix = 'last_focused_channel_';
+
+  static Future<String?> getLastSelectedCategory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastSelectedCategoryKey);
+  }
+
+  static Future<void> setLastSelectedCategory(String category) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastSelectedCategoryKey, category);
+  }
+
+  static Future<String?> getLastFocusedChannel(String category) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('$_lastFocusedChannelPrefix$category');
+  }
+
+  static Future<void> setLastFocusedChannel(String category, String channelName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_lastFocusedChannelPrefix$category', channelName);
+  }
 }

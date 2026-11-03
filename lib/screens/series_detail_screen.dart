@@ -4,8 +4,10 @@ import '../models/series.dart';
 import '../models/series_item.dart';
 import '../models/media_metadata.dart';
 import '../models/channel.dart';
+import '../models/playlist.dart';
 import '../services/metadata_service.dart';
 import '../services/database_service.dart';
+import '../services/stalker_service.dart';
 import '../services/xtream_service.dart';
 import '../providers/theme_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -58,6 +60,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
        final stalkerService = StalkerService(
          portalUrl: currentPlaylist.url,
          macAddress: currentPlaylist.macAddress ?? '00:1A:79:00:00:00',
+         serialNumber: currentPlaylist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
+         deviceId: currentPlaylist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
+         deviceId2: currentPlaylist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
+         signature: currentPlaylist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
        );
        meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
        try {
