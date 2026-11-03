@@ -11,7 +11,6 @@ import '../services/vortextube_service.dart';
 import '../widgets/smooth_page_route.dart';
 import 'mobile_video_player_screen.dart';
 import 'series_detail_screen.dart';
-import 'settings_screen.dart';
 import 'video_player_screen.dart';
 
 enum VortexNavTarget {
@@ -28,7 +27,8 @@ enum VortexNavTarget {
 
 enum VortexZone { sidebar, searchBar, filterBar, content }
 
-enum VortexFilter { all, recent, topRated, inProgress }
+enum VortexFilter { all, recent, topRated, inProgress, year2024, year2023, year2022, yearOlder }
+enum VortexSort { recommended, nameAsc, ratingDesc, yearDesc }
 
 class VortexTubeScreen extends StatefulWidget {
   const VortexTubeScreen({super.key});
@@ -53,6 +53,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   // Filter State
   VortexFilter _activeFilter = VortexFilter.all;
+  VortexSort _activeSort = VortexSort.recommended;
   String _selectedCategoryFilter = 'All';
   int _focusedFilterIndex = 0;
 
@@ -200,13 +201,46 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       case VortexFilter.all:
         break;
       case VortexFilter.recent:
-        items.sort((a, b) => (b.lastPlayed ?? DateTime(2000)).compareTo(a.lastPlayed ?? DateTime(2000)));
+        items = items.where((c) => c.lastPlayed != null).toList();
         break;
       case VortexFilter.topRated:
-        items.sort((a, b) => b.rating.compareTo(a.rating));
+        items = items.where((c) => c.rating >= 6.5).toList();
         break;
       case VortexFilter.inProgress:
         items = items.where((c) => c.watchedMilliseconds > 0).toList();
+        break;
+      case VortexFilter.year2024:
+        items = items.where((c) => c.name.contains('2024')).toList();
+        break;
+      case VortexFilter.year2023:
+        items = items.where((c) => c.name.contains('2023')).toList();
+        break;
+      case VortexFilter.year2022:
+        items = items.where((c) => c.name.contains('2022')).toList();
+        break;
+      case VortexFilter.yearOlder:
+        items = items.where((c) => !c.name.contains('2024') && !c.name.contains('2023') && !c.name.contains('2022')).toList();
+        break;
+    }
+
+    switch (_activeSort) {
+      case VortexSort.recommended:
+        items.sort((a, b) => VortexTubeService.scoreItem(channel: b, lovedCategories: _favoriteCategories)
+            .compareTo(VortexTubeService.scoreItem(channel: a, lovedCategories: _favoriteCategories)));
+        break;
+      case VortexSort.nameAsc:
+        items.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        break;
+      case VortexSort.ratingDesc:
+        items.sort((a, b) => b.rating.compareTo(a.rating));
+        break;
+      case VortexSort.yearDesc:
+        // Extract 4-digit year regex from name
+        int getYear(String name) {
+          final m = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(name);
+          return m != null ? int.parse(m.group(1)!) : 0;
+        }
+        items.sort((a, b) => getYear(b.name).compareTo(getYear(a.name)));
         break;
     }
 
@@ -239,6 +273,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
     if (!mounted) return;
 
+    String popupSearchQuery = '';
+
     await showDialog(
       context: context,
       builder: (context) {
@@ -251,8 +287,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                 side: const BorderSide(color: Color(0xFF282828)),
               ),
               child: Container(
-                width: 580,
-                height: 520,
+                width: 600,
+                height: 560,
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,7 +321,40 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                       'Favorite categories from your playlist to automatically populate your personalized shelves.',
                       style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    // Search input for categories
+                    Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF222222),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF333333)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_rounded, color: Color(0xFF888888), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              decoration: const InputDecoration(
+                                hintText: 'Search categories...',
+                                hintStyle: TextStyle(color: Color(0xFF717171), fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  popupSearchQuery = val.trim().toLowerCase();
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     const Divider(color: Color(0xFF282828), height: 1),
                     Expanded(
                       child: DefaultTabController(
@@ -306,15 +375,24 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                               child: TabBarView(
                                 children: [
                                   _buildCategoryPickerList(
-                                    categoriesByType[ContentType.live]!.toList()..sort(),
+                                    categoriesByType[ContentType.live]!
+                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
+                                        .toList()
+                                      ..sort(),
                                     setDialogState,
                                   ),
                                   _buildCategoryPickerList(
-                                    categoriesByType[ContentType.movie]!.toList()..sort(),
+                                    categoriesByType[ContentType.movie]!
+                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
+                                        .toList()
+                                      ..sort(),
                                     setDialogState,
                                   ),
                                   _buildCategoryPickerList(
-                                    categoriesByType[ContentType.series]!.toList()..sort(),
+                                    categoriesByType[ContentType.series]!
+                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
+                                        .toList()
+                                      ..sort(),
                                     setDialogState,
                                   ),
                                 ],
@@ -339,6 +417,235 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       _favoriteCategories = updatedFavs.toSet();
     });
     _loadActiveViewContent();
+  }
+
+  void _showVortexSettingsPopup() async {
+    final playlists = await DatabaseService.getAllPlaylists();
+    final favCategories = (await PreferencesService.getFavoriteCategories()).toList()..sort();
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF161616),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFF282828)),
+              ),
+              child: Container(
+                width: 620,
+                height: 560,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF0000).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.settings_rounded, color: Color(0xFFFF0000)),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'VortexTube Settings & Playlists',
+                          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Manage playlists and favorite lists directly within VortexTube.',
+                      style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(color: Color(0xFF282828), height: 1),
+                    Expanded(
+                      child: DefaultTabController(
+                        length: 2,
+                        child: Column(
+                          children: [
+                            const TabBar(
+                              indicatorColor: Color(0xFFFF0000),
+                              labelColor: Colors.white,
+                              unselectedLabelColor: Color(0xFF888888),
+                              tabs: [
+                                Tab(text: 'Playlists Manager'),
+                                Tab(text: 'Loved Categories'),
+                              ],
+                            ),
+                            Expanded(
+                              child: TabBarView(
+                                children: [
+                                  // Tab 1: Playlists
+                                  ListView.builder(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    itemCount: playlists.length,
+                                    itemBuilder: (context, index) {
+                                      final pl = playlists[index];
+                                      final isActive = pl.id == _activePlaylist?.id;
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: isActive ? const Color(0xFF242424) : const Color(0xFF1B1B1B),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isActive ? const Color(0xFFFF0000) : const Color(0xFF2A2A2A),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              pl.isStalker
+                                                  ? Icons.router_rounded
+                                                  : pl.isXtreamCodes
+                                                      ? Icons.dns_rounded
+                                                      : Icons.playlist_play_rounded,
+                                              color: isActive ? const Color(0xFFFF0000) : Colors.white70,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    pl.name,
+                                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                                  ),
+                                                  Text(
+                                                    '${pl.channelCount} items',
+                                                    style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            if (!isActive)
+                                              ElevatedButton(
+                                                onPressed: () async {
+                                                  await PreferencesService.setActivePlaylistId(pl.id);
+                                                  setDialogState(() {
+                                                    _activePlaylist = pl;
+                                                  });
+                                                  setState(() {
+                                                    _activePlaylist = pl;
+                                                  });
+                                                  _loadInitialData();
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: const Color(0xFF2A2A2A),
+                                                  foregroundColor: Colors.white,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                ),
+                                                child: const Text('Use', style: TextStyle(fontSize: 12)),
+                                              )
+                                            else
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFF0000).withValues(alpha: 0.2),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: const Text(
+                                                  'ACTIVE',
+                                                  style: TextStyle(color: Color(0xFFFF0000), fontSize: 10, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                              onPressed: () async {
+                                                await DatabaseService.deletePlaylist(pl.id);
+                                                final updated = await DatabaseService.getAllPlaylists();
+                                                setDialogState(() {
+                                                  playlists.clear();
+                                                  playlists.addAll(updated);
+                                                  if (_activePlaylist?.id == pl.id) {
+                                                    _activePlaylist = updated.firstOrNull;
+                                                  }
+                                                });
+                                                setState(() {
+                                                  _activePlaylist = playlists.firstOrNull;
+                                                });
+                                                _loadInitialData();
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+
+                                  // Tab 2: Loved Categories Manager
+                                  ListView.builder(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    itemCount: favCategories.length,
+                                    itemBuilder: (context, index) {
+                                      final cat = favCategories[index];
+                                      return Container(
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1E1E1E),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.favorite_rounded, color: Color(0xFFFF0000), size: 18),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                cat,
+                                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.remove_circle_outline, color: Color(0xFF888888), size: 18),
+                                              onPressed: () async {
+                                                await PreferencesService.toggleFavoriteCategory(cat);
+                                                setDialogState(() {
+                                                  favCategories.remove(cat);
+                                                  _favoriteCategories.remove(cat);
+                                                });
+                                                setState(() {});
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    _loadInitialData();
   }
 
   Widget _buildCategoryPickerList(List<String> categories, StateSetter setDialogState) {
@@ -447,11 +754,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     setState(() {
       switch (_currentZone) {
         case VortexZone.sidebar:
+          // Sidebar top boundary is profile (index 0) - cannot go above
           if (_focusedNavIndex > 0) {
             _focusedNavIndex--;
           }
           break;
         case VortexZone.searchBar:
+          // Top boundary: search is already the top-most bar. Do not go above search box!
           break;
         case VortexZone.filterBar:
           _currentZone = VortexZone.searchBar;
@@ -653,6 +962,161 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     }
   }
 
+  void _showSearchPopup() async {
+    final allChannels = await DatabaseService.getAllChannels();
+    final lovedCategories = _favoriteCategories;
+    final eligibleItems = allChannels.where((c) {
+      final isItemLoved = c.isFavorite;
+      final isCatLoved = c.group != null && lovedCategories.contains(c.group!);
+      return isItemLoved || isCatLoved;
+    }).toList();
+
+    String query = '';
+    List<Channel> searchResults = [];
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: const Color(0xFF161616),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Color(0xFF282828)),
+              ),
+              child: Container(
+                width: 680,
+                height: 580,
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF0000).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.search_rounded, color: Color(0xFFFF0000)),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Search VortexTube',
+                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    // Search Bar
+                    Container(
+                      height: 44,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF222222),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_rounded, color: Color(0xFF888888), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              autofocus: true,
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              decoration: const InputDecoration(
+                                hintText: 'Type to search loved channels, movies, and series...',
+                                hintStyle: TextStyle(color: Color(0xFF717171), fontSize: 13),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  query = val.trim().toLowerCase();
+                                  if (query.isEmpty) {
+                                    searchResults = [];
+                                  } else {
+                                    searchResults = eligibleItems
+                                        .where((c) => c.name.toLowerCase().contains(query))
+                                        .take(20)
+                                        .toList();
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(color: Color(0xFF282828), height: 1),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: searchResults.isEmpty
+                          ? Center(
+                              child: Text(
+                                query.isEmpty ? 'Start typing to search your loved content' : 'No items matching "$query"',
+                                style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: searchResults.length,
+                              itemBuilder: (context, index) {
+                                final item = searchResults[index];
+                                return ListTile(
+                                  leading: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      width: 48,
+                                      height: 36,
+                                      color: const Color(0xFF242424),
+                                      child: item.logo != null && item.logo!.isNotEmpty
+                                          ? Image.network(
+                                              item.logo!,
+                                              fit: BoxFit.contain,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.play_arrow, color: Colors.white70),
+                                            )
+                                          : const Icon(Icons.play_arrow, color: Colors.white70),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    item.name,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: Text(
+                                    item.group ?? 'Loved',
+                                    style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+                                  ),
+                                  trailing: const Icon(Icons.play_circle_fill, color: Color(0xFFFF0000), size: 28),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _playItem(item);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _selectNavTarget(VortexNavTarget target) {
     if (target == VortexNavTarget.addMore) {
       _showAddMorePopup();
@@ -665,12 +1129,12 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     }
 
     if (target == VortexNavTarget.settings) {
-      Navigator.push(context, SmoothPageRoute(child: const SettingsScreen())).then((_) => _loadActiveViewContent());
+      _showVortexSettingsPopup();
       return;
     }
 
     if (target == VortexNavTarget.search) {
-      _searchFocusNode.requestFocus();
+      _showSearchPopup();
       return;
     }
 
@@ -1040,6 +1504,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   Widget _buildTopFilterBar() {
     final catFilters = _getAvailableCategoryFilters();
 
+    final isMovieOrSeries = _activeNav == VortexNavTarget.movies || _activeNav == VortexNavTarget.series;
+
     final filterPills = <Widget>[
       _buildFilterPill('All', _activeFilter == VortexFilter.all && _selectedCategoryFilter == 'All', 0, () {
         setState(() {
@@ -1066,6 +1532,32 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           _applyFilter();
         });
       }),
+      if (isMovieOrSeries) ...[
+        _buildFilterPill('2024', _activeFilter == VortexFilter.year2024, 4, () {
+          setState(() {
+            _activeFilter = VortexFilter.year2024;
+            _applyFilter();
+          });
+        }),
+        _buildFilterPill('2023', _activeFilter == VortexFilter.year2023, 5, () {
+          setState(() {
+            _activeFilter = VortexFilter.year2023;
+            _applyFilter();
+          });
+        }),
+        _buildFilterPill('2022', _activeFilter == VortexFilter.year2022, 6, () {
+          setState(() {
+            _activeFilter = VortexFilter.year2022;
+            _applyFilter();
+          });
+        }),
+        _buildFilterPill('Older', _activeFilter == VortexFilter.yearOlder, 7, () {
+          setState(() {
+            _activeFilter = VortexFilter.yearOlder;
+            _applyFilter();
+          });
+        }),
+      ],
     ];
 
     for (int i = 0; i < catFilters.length; i++) {
