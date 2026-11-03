@@ -21,568 +21,12 @@ enum VortexNavTarget {
   movies,
   liveTv,
   series,
-  addMore,
   settings,
-}
-
-enum _AddMoreFocusArea {
-  closeButton,
-  search,
-  tabs,
-  listRow,
-  listHeart,
-}
-
-class _AddMoreVortexDialog extends StatefulWidget {
-  final Map<ContentType, List<String>> categoriesByType;
-  final Set<String> initialFavorites;
-  final ValueChanged<Set<String>> onFavoritesChanged;
-
-  const _AddMoreVortexDialog({
-    required this.categoriesByType,
-    required this.initialFavorites,
-    required this.onFavoritesChanged,
-  });
-
-  @override
-  State<_AddMoreVortexDialog> createState() => _AddMoreVortexDialogState();
-}
-
-class _AddMoreVortexDialogState extends State<_AddMoreVortexDialog> {
-  late Set<String> _currentFavorites;
-  int _activeTabIndex = 0; // 0: Live TV, 1: Movies / VOD, 2: Series
-  String _searchQuery = '';
-
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _dialogKeyFocusNode = FocusNode();
-  final ScrollController _listScrollController = ScrollController();
-
-  _AddMoreFocusArea _focusArea = _AddMoreFocusArea.search;
-  int _focusedRowIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentFavorites = Set<String>.from(widget.initialFavorites);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchFocusNode.requestFocus();
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _dialogKeyFocusNode.dispose();
-    _listScrollController.dispose();
-    super.dispose();
-  }
-
-  List<String> _getFilteredCategories() {
-    ContentType type;
-    if (_activeTabIndex == 0) {
-      type = ContentType.live;
-    } else if (_activeTabIndex == 1) {
-      type = ContentType.movie;
-    } else {
-      type = ContentType.series;
-    }
-
-    final list = widget.categoriesByType[type] ?? [];
-    if (_searchQuery.isEmpty) return list;
-    return list.where((c) => c.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-  }
-
-  void _ensureVisible(int index) {
-    if (!_listScrollController.hasClients) return;
-    const itemHeight = 60.0;
-    final targetOffset = (index * itemHeight) - 100.0;
-    final clamped = targetOffset.clamp(0.0, _listScrollController.position.maxScrollExtent);
-    _listScrollController.animateTo(
-      clamped,
-      duration: const Duration(milliseconds: 140),
-      curve: Curves.easeOut,
-    );
-  }
-
-  Future<void> _toggleFavorite(String category) async {
-    final isFav = await PreferencesService.toggleFavoriteCategory(category);
-    setState(() {
-      if (isFav) {
-        _currentFavorites.add(category);
-      } else {
-        _currentFavorites.remove(category);
-      }
-    });
-    widget.onFavoritesChanged(_currentFavorites);
-  }
-
-  void _handleDialogKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return;
-    final key = event.logicalKey;
-
-    if (key == LogicalKeyboardKey.escape) {
-      Navigator.pop(context);
-      return;
-    }
-
-    final items = _getFilteredCategories();
-
-    // When search field has focus
-    if (_searchFocusNode.hasFocus) {
-      if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
-        _searchFocusNode.unfocus();
-        _dialogKeyFocusNode.requestFocus();
-        setState(() {
-          if (items.isNotEmpty) {
-            _focusArea = _AddMoreFocusArea.listRow;
-            _focusedRowIndex = 0;
-          } else {
-            _focusArea = _AddMoreFocusArea.tabs;
-          }
-        });
-      } else if (key == LogicalKeyboardKey.arrowUp) {
-        _searchFocusNode.unfocus();
-        _dialogKeyFocusNode.requestFocus();
-        setState(() {
-          _focusArea = _AddMoreFocusArea.closeButton;
-        });
-      }
-      return;
-    }
-
-    // Modal navigation using D-pad / Arrow keys
-    if (key == LogicalKeyboardKey.arrowUp) {
-      if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
-        if (_focusedRowIndex > 0) {
-          setState(() {
-            _focusedRowIndex--;
-          });
-          _ensureVisible(_focusedRowIndex);
-        } else {
-          setState(() {
-            _focusArea = _AddMoreFocusArea.tabs;
-          });
-        }
-      } else if (_focusArea == _AddMoreFocusArea.tabs) {
-        _dialogKeyFocusNode.unfocus();
-        _searchFocusNode.requestFocus();
-        setState(() {
-          _focusArea = _AddMoreFocusArea.search;
-        });
-      } else if (_focusArea == _AddMoreFocusArea.search) {
-        setState(() {
-          _focusArea = _AddMoreFocusArea.closeButton;
-        });
-      }
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      if (_focusArea == _AddMoreFocusArea.closeButton) {
-        _searchFocusNode.requestFocus();
-        setState(() {
-          _focusArea = _AddMoreFocusArea.search;
-        });
-      } else if (_focusArea == _AddMoreFocusArea.search) {
-        _searchFocusNode.unfocus();
-        _dialogKeyFocusNode.requestFocus();
-        setState(() {
-          _focusArea = _AddMoreFocusArea.tabs;
-        });
-      } else if (_focusArea == _AddMoreFocusArea.tabs) {
-        if (items.isNotEmpty) {
-          setState(() {
-            _focusArea = _AddMoreFocusArea.listRow;
-            _focusedRowIndex = 0;
-          });
-          _ensureVisible(0);
-        }
-      } else if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
-        if (_focusedRowIndex < items.length - 1) {
-          setState(() {
-            _focusedRowIndex++;
-          });
-          _ensureVisible(_focusedRowIndex);
-        }
-      }
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
-      if (_focusArea == _AddMoreFocusArea.tabs) {
-        if (_activeTabIndex > 0) {
-          setState(() {
-            _activeTabIndex--;
-            _focusedRowIndex = 0;
-          });
-        }
-      } else if (_focusArea == _AddMoreFocusArea.listHeart) {
-        setState(() {
-          _focusArea = _AddMoreFocusArea.listRow;
-        });
-      }
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      if (_focusArea == _AddMoreFocusArea.tabs) {
-        if (_activeTabIndex < 2) {
-          setState(() {
-            _activeTabIndex++;
-            _focusedRowIndex = 0;
-          });
-        }
-      } else if (_focusArea == _AddMoreFocusArea.listRow) {
-        setState(() {
-          _focusArea = _AddMoreFocusArea.listHeart;
-        });
-      }
-    } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.space) {
-      if (_focusArea == _AddMoreFocusArea.closeButton) {
-        Navigator.pop(context);
-      } else if (_focusArea == _AddMoreFocusArea.search) {
-        _searchFocusNode.requestFocus();
-      } else if (_focusArea == _AddMoreFocusArea.tabs) {
-        if (items.isNotEmpty) {
-          setState(() {
-            _focusArea = _AddMoreFocusArea.listRow;
-            _focusedRowIndex = 0;
-          });
-        }
-      } else if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
-        if (_focusedRowIndex >= 0 && _focusedRowIndex < items.length) {
-          _toggleFavorite(items[_focusedRowIndex]);
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredCategories = _getFilteredCategories();
-    final selectedCount = _currentFavorites.length;
-
-    return KeyboardListener(
-      focusNode: _dialogKeyFocusNode,
-      autofocus: true,
-      onKeyEvent: _handleDialogKeyEvent,
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: Center(
-          child: Container(
-            width: 560,
-            constraints: const BoxConstraints(maxHeight: 700),
-            decoration: BoxDecoration(
-              color: const Color(0xFF171719),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFF2B2B30), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.9),
-                  blurRadius: 36,
-                  spreadRadius: 8,
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.fromLTRB(26, 24, 26, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Modal Header
-                Row(
-                  children: [
-                    // Plus Badge
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF27272A).withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3F3F46).withValues(alpha: 0.6)),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.add_rounded, color: Color(0xFFE4E4E7), size: 20),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Add to VortexTube',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Selected Pill Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF22D3EE).withValues(alpha: 0.5)),
-                      ),
-                      child: Text(
-                        '$selectedCount Selected',
-                        style: const TextStyle(
-                          color: Color(0xFF22D3EE),
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    // Close Button
-                    InkWell(
-                      onTap: () => Navigator.pop(context),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: _focusArea == _AddMoreFocusArea.closeButton
-                              ? const Color(0xFF27272A)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                          border: _focusArea == _AddMoreFocusArea.closeButton
-                              ? Border.all(color: Colors.white, width: 2)
-                              : null,
-                        ),
-                        child: const Icon(Icons.close_rounded, color: Color(0xFFA1A1AA), size: 20),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Favorite categories from your playlist to automatically populate your personalized shelves.',
-                  style: TextStyle(color: Color(0xFF8E8E97), fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 16),
-
-                // Search Bar Input Field
-                Container(
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E22),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _searchFocusNode.hasFocus
-                          ? Colors.white
-                          : (_focusArea == _AddMoreFocusArea.search
-                              ? Colors.white70
-                              : const Color(0xFF2B2B30)),
-                      width: _searchFocusNode.hasFocus ? 2 : 1,
-                    ),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.search_rounded, color: Color(0xFF757580), size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          style: const TextStyle(color: Colors.white, fontSize: 13.5),
-                          decoration: const InputDecoration(
-                            hintText: 'Search categories...',
-                            hintStyle: TextStyle(color: Color(0xFF787882), fontSize: 13),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                          onChanged: (val) {
-                            setState(() {
-                              _searchQuery = val.trim();
-                              _focusedRowIndex = 0;
-                            });
-                          },
-                        ),
-                      ),
-                      if (_searchQuery.isNotEmpty)
-                        GestureDetector(
-                          onTap: () {
-                            _searchController.clear();
-                            setState(() {
-                              _searchQuery = '';
-                              _focusedRowIndex = 0;
-                            });
-                          },
-                          child: const Icon(Icons.clear, color: Color(0xFF787882), size: 16),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Tab Navigation Bar: Live TV | Movies / VOD | Series
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF121214),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF27272A)),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildTabButton(0, 'Live TV'),
-                      _buildTabButton(1, 'Movies / VOD'),
-                      _buildTabButton(2, 'Series'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Category Items List
-                Expanded(
-                  child: filteredCategories.isEmpty
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
-                            child: Text(
-                              _searchQuery.isEmpty ? 'No categories available' : 'No categories found matching "$_searchQuery"',
-                              style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          controller: _listScrollController,
-                          itemCount: filteredCategories.length,
-                          itemBuilder: (context, index) {
-                            final cat = filteredCategories[index];
-                            final isFav = _currentFavorites.contains(cat);
-                            final isRowFocused = (_focusArea == _AddMoreFocusArea.listRow) && (_focusedRowIndex == index);
-                            final isHeartFocused = (_focusArea == _AddMoreFocusArea.listHeart) && (_focusedRowIndex == index);
-
-                            return Container(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
-                              child: InkWell(
-                                onTap: () => _toggleFavorite(cat),
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: isRowFocused
-                                        ? const Color(0xFF27272C)
-                                        : (isFav ? const Color(0xFF1E1E21) : const Color(0xFF1E1E21)),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isRowFocused
-                                          ? (isFav ? const Color(0xFFE50914) : Colors.white)
-                                          : (isFav ? const Color(0xFFE50914).withValues(alpha: 0.4) : const Color(0xFF26262A)),
-                                      width: isRowFocused ? 2 : 1,
-                                    ),
-                                    boxShadow: isRowFocused
-                                        ? [
-                                            BoxShadow(
-                                              color: (isFav ? const Color(0xFFE50914) : Colors.white).withValues(alpha: 0.2),
-                                              blurRadius: 10,
-                                            ),
-                                          ]
-                                        : [],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          cat,
-                                          style: TextStyle(
-                                            color: isFav ? Colors.white : const Color(0xFFD4D4D8),
-                                            fontWeight: isFav || isRowFocused ? FontWeight.w600 : FontWeight.w500,
-                                            fontSize: 14,
-                                            letterSpacing: 0.2,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Heart Toggle Button
-                                      GestureDetector(
-                                        onTap: () => _toggleFavorite(cat),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: BoxDecoration(
-                                            color: isHeartFocused ? const Color(0xFF333338) : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: isHeartFocused
-                                                ? Border.all(
-                                                    color: isFav ? const Color(0xFFE50914) : Colors.white,
-                                                    width: 2,
-                                                  )
-                                                : null,
-                                          ),
-                                          child: Icon(
-                                            isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                            color: isFav ? const Color(0xFFE50914) : const Color(0xFF71717A),
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton(int index, String title) {
-    final isActive = _activeTabIndex == index;
-    final isFocused = _focusArea == _AddMoreFocusArea.tabs && _activeTabIndex == index;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _activeTabIndex = index;
-            _focusArea = _AddMoreFocusArea.tabs;
-            _focusedRowIndex = 0;
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isActive ? const Color(0xFF252529) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isFocused ? Colors.white : (isActive ? Colors.white70 : Colors.transparent),
-              width: isFocused ? 2 : 1,
-            ),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 4,
-                    ),
-                  ]
-                : [],
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            title,
-            style: TextStyle(
-              color: isActive ? Colors.white : const Color(0xFFA1A1AA),
-              fontSize: 13,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 enum VortexZone { sidebar, searchBar, filterBar, content, rightPanel }
 
-enum VortexRightPanelType { none, addMore, settings }
+enum VortexRightPanelType { none, settings }
 
 enum VortexSortOption {
   recommended,
@@ -638,8 +82,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   // Right Side Sliding Panel State
   VortexRightPanelType _activeRightPanel = VortexRightPanelType.none;
   int _panelFocusIndex = 0;
-  int _panelTabIndex = 0; // for Add More tabs (0: Live TV, 1: Movies, 2: Series)
-  String _panelSearchQuery = '';
+  int _settingsTabIndex = 0; // 0: Playlists Manager, 1: Add to VortexTube
+  int _categoriesSubTabIndex = 0; // for Add to VortexTube: 0: Live TV, 1: Movies, 2: Series
+  final TextEditingController _categorySearchController = TextEditingController();
+  String _categorySearchQuery = '';
   Map<ContentType, List<String>> _panelCategoriesByType = {
     ContentType.live: [],
     ContentType.movie: [],
@@ -647,11 +93,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   };
   List<Playlist> _panelPlaylists = [];
 
-  void _openAddMorePanel() {
+  void _openSettingsPanel({int initialTab = 0}) {
     _clearSearchState();
+    _loadPanelPlaylists();
     _loadPanelCategories();
     setState(() {
-      _activeRightPanel = VortexRightPanelType.addMore;
+      _activeRightPanel = VortexRightPanelType.settings;
+      _settingsTabIndex = initialTab;
       _panelFocusIndex = 0;
       _currentZone = VortexZone.rightPanel;
     });
@@ -700,7 +148,6 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     {'target': VortexNavTarget.movies, 'icon': Icons.movie_outlined, 'label': 'Movies'},
     {'target': VortexNavTarget.liveTv, 'icon': Icons.live_tv_rounded, 'label': 'Live TV'},
     {'target': VortexNavTarget.series, 'icon': Icons.video_collection_outlined, 'label': 'Series'},
-    {'target': VortexNavTarget.addMore, 'icon': Icons.add_circle_outline_rounded, 'label': 'Add More'},
     {'target': VortexNavTarget.settings, 'icon': Icons.settings_outlined, 'label': 'Settings'},
   ];
 
@@ -990,362 +437,6 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     _searchQuery = '';
   }
 
-  void _showAddMorePopup() async {
-    _clearSearchState();
-    final allChannels = await DatabaseService.getAllChannels();
-    final categoriesByType = <ContentType, List<String>>{
-      ContentType.live: [],
-      ContentType.movie: [],
-      ContentType.series: [],
-    };
-
-    final liveSet = <String>{};
-    final movieSet = <String>{};
-    final seriesSet = <String>{};
-
-    for (final c in allChannels) {
-      if (c.group != null && c.group!.isNotEmpty) {
-        if (c.contentType == ContentType.live) liveSet.add(c.group!);
-        if (c.contentType == ContentType.movie) movieSet.add(c.group!);
-        if (c.contentType == ContentType.series) seriesSet.add(c.group!);
-      }
-    }
-
-    categoriesByType[ContentType.live] = liveSet.toList()..sort();
-    categoriesByType[ContentType.movie] = movieSet.toList()..sort();
-    categoriesByType[ContentType.series] = seriesSet.toList()..sort();
-
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) {
-        return _AddMoreVortexDialog(
-          categoriesByType: categoriesByType,
-          initialFavorites: _favoriteCategories,
-          onFavoritesChanged: (updated) {
-            setState(() {
-              _favoriteCategories = updated;
-            });
-          },
-        );
-      },
-    );
-
-    // Refresh feed when dialog closes
-    _clearSearchState();
-    final updatedFavs = await PreferencesService.getFavoriteCategories();
-    setState(() {
-      _favoriteCategories = updatedFavs.toSet();
-    });
-    _loadActiveViewContent();
-  }
-
-  void _showVortexSettingsPopup() async {
-    final playlists = await DatabaseService.getAllPlaylists();
-    final favCategories = (await PreferencesService.getFavoriteCategories()).toList()..sort();
-
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            return Dialog(
-              backgroundColor: const Color(0xFF161616),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: Color(0xFF282828)),
-              ),
-              child: Container(
-                width: 620,
-                height: 560,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF0000).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.settings_rounded, color: Color(0xFFFF0000)),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'VortexTube Settings & Playlists',
-                          style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Manage playlists and favorite lists directly within VortexTube.',
-                      style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(color: Color(0xFF282828), height: 1),
-                    Expanded(
-                      child: DefaultTabController(
-                        length: 2,
-                        child: Column(
-                          children: [
-                            const TabBar(
-                              indicatorColor: Color(0xFFFF0000),
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Color(0xFF888888),
-                              tabs: [
-                                Tab(text: 'Playlists Manager'),
-                                Tab(text: 'Loved Categories'),
-                              ],
-                            ),
-                            Expanded(
-                              child: TabBarView(
-                                children: [
-                                  // Tab 1: Playlists Manager with Add Button
-                                  Column(
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 8),
-                                        child: SizedBox(
-                                          width: double.infinity,
-                                          child: ElevatedButton.icon(
-                                            onPressed: () async {
-                                              final newPl = await showDialog<Playlist>(
-                                                context: context,
-                                                builder: (context) => const PlaylistDialog(),
-                                              );
-                                              if (newPl != null) {
-                                                await DatabaseService.addPlaylist(newPl);
-                                                await PreferencesService.setActivePlaylistId(newPl.id);
-                                                final updated = await DatabaseService.getAllPlaylists();
-                                                setDialogState(() {
-                                                  playlists.clear();
-                                                  playlists.addAll(updated);
-                                                  _activePlaylist = newPl;
-                                                });
-                                                setState(() {
-                                                  _activePlaylist = newPl;
-                                                });
-                                                _loadInitialData();
-                                              }
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFFF0000),
-                                              foregroundColor: Colors.white,
-                                              padding: const EdgeInsets.symmetric(vertical: 12),
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                            ),
-                                            icon: const Icon(Icons.add_rounded, size: 20),
-                                            label: const Text(
-                                              'Add Playlist (M3U, Xtream, Stalker/MAG)',
-                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: ListView.builder(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
-                                    itemCount: playlists.length,
-                                    itemBuilder: (context, index) {
-                                      final pl = playlists[index];
-                                      final isActive = pl.id == _activePlaylist?.id;
-                                      return Container(
-                                        margin: const EdgeInsets.symmetric(vertical: 4),
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                        decoration: BoxDecoration(
-                                          color: isActive ? const Color(0xFF242424) : const Color(0xFF1B1B1B),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: isActive ? const Color(0xFFFF0000) : const Color(0xFF2A2A2A),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              pl.isStalker
-                                                  ? Icons.router_rounded
-                                                  : pl.isXtreamCodes
-                                                      ? Icons.dns_rounded
-                                                      : Icons.playlist_play_rounded,
-                                              color: isActive ? const Color(0xFFFF0000) : Colors.white70,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    pl.name,
-                                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                                  ),
-                                                  Text(
-                                                    '${pl.channelCount} items',
-                                                    style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            if (!isActive)
-                                              ElevatedButton(
-                                                onPressed: () async {
-                                                  await PreferencesService.setActivePlaylistId(pl.id);
-                                                  setDialogState(() {
-                                                    _activePlaylist = pl;
-                                                  });
-                                                  setState(() {
-                                                    _activePlaylist = pl;
-                                                  });
-                                                  _loadInitialData();
-                                                },
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: const Color(0xFF2A2A2A),
-                                                  foregroundColor: Colors.white,
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                                ),
-                                                child: const Text('Use', style: TextStyle(fontSize: 12)),
-                                              )
-                                            else
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFFF0000).withValues(alpha: 0.2),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: const Text(
-                                                  'ACTIVE',
-                                                  style: TextStyle(color: Color(0xFFFF0000), fontSize: 10, fontWeight: FontWeight.bold),
-                                                ),
-                                              ),
-                                            const SizedBox(width: 8),
-                                            IconButton(
-                                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                                              onPressed: () async {
-                                                await DatabaseService.deletePlaylist(pl.id);
-                                                final updated = await DatabaseService.getAllPlaylists();
-                                                setDialogState(() {
-                                                  playlists.clear();
-                                                  playlists.addAll(updated);
-                                                  if (_activePlaylist?.id == pl.id) {
-                                                    _activePlaylist = updated.firstOrNull;
-                                                  }
-                                                });
-                                                setState(() {
-                                                  _activePlaylist = playlists.firstOrNull;
-                                                });
-                                                _loadInitialData();
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  // Tab 2: Loved Categories Manager
-                                  ListView.builder(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    itemCount: favCategories.length,
-                                    itemBuilder: (context, index) {
-                                      final cat = favCategories[index];
-                                      return FocusableActionDetector(
-                                        actions: {
-                                          ActivateIntent: CallbackAction<ActivateIntent>(
-                                            onInvoke: (_) async {
-                                              await PreferencesService.toggleFavoriteCategory(cat);
-                                              setDialogState(() {
-                                                favCategories.remove(cat);
-                                                _favoriteCategories.remove(cat);
-                                              });
-                                              setState(() {});
-                                              return null;
-                                            },
-                                          ),
-                                        },
-                                        child: Builder(
-                                          builder: (context) {
-                                            final hasFocus = Focus.of(context).hasFocus;
-                                            return InkWell(
-                                              onTap: () async {
-                                                await PreferencesService.toggleFavoriteCategory(cat);
-                                                setDialogState(() {
-                                                  favCategories.remove(cat);
-                                                  _favoriteCategories.remove(cat);
-                                                });
-                                                setState(() {});
-                                              },
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: Container(
-                                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                                decoration: BoxDecoration(
-                                                  color: hasFocus ? const Color(0xFF333333) : const Color(0xFF1E1E1E),
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                    color: hasFocus ? Colors.white : Colors.transparent,
-                                                    width: hasFocus ? 2 : 1,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    const Icon(Icons.favorite_rounded, color: Color(0xFFFF0000), size: 18),
-                                                    const SizedBox(width: 12),
-                                                    Expanded(
-                                                      child: Text(
-                                                        cat,
-                                                        style: TextStyle(
-                                                          color: hasFocus ? Colors.white : const Color(0xFFE0E0E0),
-                                                          fontWeight: hasFocus ? FontWeight.bold : FontWeight.normal,
-                                                          fontSize: 13,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const Icon(Icons.remove_circle_outline, color: Color(0xFF888888), size: 18),
-                                                  ],
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    _loadInitialData();
-  }
-
-
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
     final key = event.logicalKey;
@@ -1440,43 +531,45 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   List<String> _getFilteredPanelCategories() {
     ContentType type;
-    if (_panelTabIndex == 0) {
+    if (_categoriesSubTabIndex == 0) {
       type = ContentType.live;
-    } else if (_panelTabIndex == 1) {
+    } else if (_categoriesSubTabIndex == 1) {
       type = ContentType.movie;
     } else {
       type = ContentType.series;
     }
     final list = _panelCategoriesByType[type] ?? [];
-    if (_panelSearchQuery.isEmpty) return list;
-    return list.where((c) => c.toLowerCase().contains(_panelSearchQuery.toLowerCase())).toList();
+    if (_categorySearchQuery.isEmpty) return list;
+    return list.where((c) => c.toLowerCase().contains(_categorySearchQuery.toLowerCase())).toList();
   }
 
   void _handlePanelActivate() async {
-    if (_activeRightPanel == VortexRightPanelType.addMore) {
-      final categories = _getFilteredPanelCategories();
-      if (_panelFocusIndex >= 0 && _panelFocusIndex < categories.length) {
-        final cat = categories[_panelFocusIndex];
-        final isFav = await PreferencesService.toggleFavoriteCategory(cat);
-        setState(() {
-          if (isFav) {
-            _favoriteCategories.add(cat);
-          } else {
-            _favoriteCategories.remove(cat);
+    if (_activeRightPanel == VortexRightPanelType.settings) {
+      if (_settingsTabIndex == 0) {
+        if (_panelFocusIndex == 0) {
+          _showAddPlaylistDialog();
+        } else {
+          final playlistIndex = _panelFocusIndex - 1;
+          if (playlistIndex >= 0 && playlistIndex < _panelPlaylists.length) {
+            final p = _panelPlaylists[playlistIndex];
+            await PreferencesService.setActivePlaylistId(p.id);
+            setState(() {
+              _activePlaylist = p;
+            });
+            _loadActiveViewContent();
           }
-        });
-        _loadActiveViewContent();
-      }
-    } else if (_activeRightPanel == VortexRightPanelType.settings) {
-      if (_panelFocusIndex == 0) {
-        _showAddPlaylistDialog();
+        }
       } else {
-        final playlistIndex = _panelFocusIndex - 1;
-        if (playlistIndex >= 0 && playlistIndex < _panelPlaylists.length) {
-          final p = _panelPlaylists[playlistIndex];
-          await PreferencesService.setActivePlaylistId(p.id);
+        final categories = _getFilteredPanelCategories();
+        if (_panelFocusIndex >= 0 && _panelFocusIndex < categories.length) {
+          final cat = categories[_panelFocusIndex];
+          final isFav = await PreferencesService.toggleFavoriteCategory(cat);
           setState(() {
-            _activePlaylist = p;
+            if (isFav) {
+              _favoriteCategories.add(cat);
+            } else {
+              _favoriteCategories.remove(cat);
+            }
           });
           _loadActiveViewContent();
         }
@@ -1565,15 +658,17 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     setState(() {
       switch (_currentZone) {
         case VortexZone.rightPanel:
-          if (_activeRightPanel == VortexRightPanelType.addMore) {
-            final count = _getFilteredPanelCategories().length;
-            if (_panelFocusIndex < count - 1) {
-              _panelFocusIndex++;
-            }
-          } else if (_activeRightPanel == VortexRightPanelType.settings) {
-            final count = 1 + _panelPlaylists.length;
-            if (_panelFocusIndex < count - 1) {
-              _panelFocusIndex++;
+          if (_activeRightPanel == VortexRightPanelType.settings) {
+            if (_settingsTabIndex == 0) {
+              final count = 1 + _panelPlaylists.length;
+              if (_panelFocusIndex < count - 1) {
+                _panelFocusIndex++;
+              }
+            } else {
+              final count = _getFilteredPanelCategories().length;
+              if (_panelFocusIndex < count - 1) {
+                _panelFocusIndex++;
+              }
             }
           }
           break;
@@ -1708,10 +803,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     setState(() {
       switch (_currentZone) {
         case VortexZone.rightPanel:
+          if (_settingsTabIndex == 1 && _categoriesSubTabIndex < 2) {
+            _categoriesSubTabIndex++;
+            _panelFocusIndex = 0;
+          }
           break;
         case VortexZone.sidebar:
           if (_activeRightPanel != VortexRightPanelType.none) {
-            // Confirm/Enter right panel
+            // Focus into the already active right panel
             _currentZone = VortexZone.rightPanel;
             _panelFocusIndex = 0;
             break;
@@ -1846,22 +945,16 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
 
   void _selectNavTarget(VortexNavTarget target) {
-    if (target == VortexNavTarget.addMore) {
-      _clearSearchState();
-      _loadPanelCategories();
-      setState(() {
-        _activeRightPanel = VortexRightPanelType.addMore;
-        _panelFocusIndex = 0;
-      });
-      return;
-    }
-
     if (target == VortexNavTarget.settings) {
       _clearSearchState();
       _loadPanelPlaylists();
+      _loadPanelCategories();
       setState(() {
+        _activeNav = target;
         _activeRightPanel = VortexRightPanelType.settings;
+        _settingsTabIndex = 0;
         _panelFocusIndex = 0;
+        _currentZone = VortexZone.rightPanel;
       });
       return;
     }
@@ -1875,6 +968,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
     if (target == VortexNavTarget.search) {
       setState(() {
+        _activeNav = target;
         _currentZone = VortexZone.searchBar;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1886,15 +980,16 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     // Always clear search input and reset search filter on section navigation
     _clearSearchState();
 
+    setState(() {
+      _activeNav = target;
+      _activeFilter = VortexActiveFilter.all;
+      _focusedFilterIndex = 0;
+      _isLoading = true;
+    });
+
     _navDebounceTimer?.cancel();
-    _navDebounceTimer = Timer(const Duration(milliseconds: 60), () {
+    _navDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       if (mounted) {
-        setState(() {
-          _activeNav = target;
-          _activeFilter = VortexActiveFilter.all;
-          _focusedFilterIndex = 0;
-          _isLoading = true;
-        });
         _loadActiveViewContent();
       }
     });
@@ -2108,7 +1203,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildRightSlidingPanel() {
-    final bool isOpen = _activeRightPanel != VortexRightPanelType.none;
+    final bool isOpen = _activeRightPanel == VortexRightPanelType.settings;
     final isFocused = _currentZone == VortexZone.rightPanel;
 
     return Positioned(
@@ -2120,7 +1215,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         curve: Curves.easeInOut,
         offset: isOpen ? Offset.zero : const Offset(1.1, 0),
         child: Container(
-          width: 380,
+          width: 400,
           decoration: BoxDecoration(
             color: const Color(0xFF141414),
             border: Border(
@@ -2137,144 +1232,75 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
               ),
             ],
           ),
-          child: _activeRightPanel == VortexRightPanelType.addMore
-              ? _buildAddMorePanelContent()
-              : (_activeRightPanel == VortexRightPanelType.settings
-                  ? _buildSettingsPanelContent()
-                  : const SizedBox.shrink()),
+          child: _buildSettingsPanelContent(),
         ),
       ),
     );
   }
 
-  Widget _buildAddMorePanelContent() {
-    final categories = _getFilteredPanelCategories();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Panel Header
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 16, 14),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFF222222))),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.favorite_rounded, color: Color(0xFFFF0000), size: 22),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Add to VortexTube',
-                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Color(0xFF888888), size: 20),
-                onPressed: () {
-                  setState(() {
-                    _activeRightPanel = VortexRightPanelType.none;
-                    _currentZone = VortexZone.sidebar;
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-
-        // Tabs: Live TV (0), Movies (1), Series (2)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              _buildPanelTabButton(0, 'Live TV'),
-              const SizedBox(width: 8),
-              _buildPanelTabButton(1, 'Movies'),
-              const SizedBox(width: 8),
-              _buildPanelTabButton(2, 'Series'),
-            ],
-          ),
-        ),
-
-        // Category list
-        Expanded(
-          child: categories.isEmpty
-              ? const Center(
-                  child: Text('No categories found', style: TextStyle(color: Color(0xFF888888))),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  itemCount: categories.length,
-                  itemBuilder: (context, idx) {
-                    final cat = categories[idx];
-                    final isFav = _favoriteCategories.contains(cat);
-                    final isRowFocused = _currentZone == VortexZone.rightPanel && _panelFocusIndex == idx;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 6),
-                      decoration: BoxDecoration(
-                        color: isRowFocused ? const Color(0xFF282828) : const Color(0xFF1B1B1B),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: isRowFocused ? Colors.white : const Color(0xFF2A2A2A),
-                          width: isRowFocused ? 2 : 1,
-                        ),
-                      ),
-                      child: ListTile(
-                        dense: true,
-                        title: Text(
-                          cat,
-                          style: TextStyle(
-                            color: isRowFocused ? Colors.white : const Color(0xFFD4D4D8),
-                            fontWeight: isRowFocused ? FontWeight.bold : FontWeight.w500,
-                            fontSize: 13,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Icon(
-                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: isFav ? const Color(0xFFFF0000) : const Color(0xFF71717A),
-                          size: 20,
-                        ),
-                        onTap: () async {
-                          final newFav = await PreferencesService.toggleFavoriteCategory(cat);
-                          setState(() {
-                            if (newFav) {
-                              _favoriteCategories.add(cat);
-                            } else {
-                              _favoriteCategories.remove(cat);
-                            }
-                          });
-                          _loadActiveViewContent();
-                        },
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPanelTabButton(int tabIdx, String label) {
-    final isSelected = _panelTabIndex == tabIdx;
+  Widget _buildSettingsMainTab(int tabIdx, String label, IconData icon) {
+    final isSelected = _settingsTabIndex == tabIdx;
     return Expanded(
       child: InkWell(
         onTap: () {
           setState(() {
-            _panelTabIndex = tabIdx;
+            _settingsTabIndex = tabIdx;
+            _panelFocusIndex = 0;
+          });
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF242424) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? const Color(0xFFFF0000) : const Color(0xFF262626),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? const Color(0xFFFF0000) : const Color(0xFF888888),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : const Color(0xFF888888),
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubCategoryTab(int subIdx, String label) {
+    final isSelected = _categoriesSubTabIndex == subIdx;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _categoriesSubTabIndex = subIdx;
             _panelFocusIndex = 0;
           });
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF2E2E2E) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? Colors.white70 : const Color(0xFF2E2E2E),
+              color: isSelected ? Colors.white70 : const Color(0xFF262626),
             ),
           ),
           child: Center(
@@ -2282,7 +1308,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
               label,
               style: TextStyle(
                 color: isSelected ? Colors.white : const Color(0xFF888888),
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
@@ -2308,7 +1334,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
-                  'Settings & Playlists',
+                  'Settings & VortexTube',
                   style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -2325,9 +1351,35 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           ),
         ),
 
+        // Settings Tabs: [Playlists Manager] | [Add to VortexTube]
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          child: Row(
+            children: [
+              _buildSettingsMainTab(0, 'Playlists Manager', Icons.playlist_play_rounded),
+              const SizedBox(width: 8),
+              _buildSettingsMainTab(1, 'Add to VortexTube', Icons.favorite_rounded),
+            ],
+          ),
+        ),
+
+        // Tab Content
+        Expanded(
+          child: _settingsTabIndex == 0
+              ? _buildPlaylistsManagerTabContent()
+              : _buildAddToVortexTubeTabContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlaylistsManagerTabContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         // Action: Add New Playlist button
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
           child: InkWell(
             onTap: _showAddPlaylistDialog,
             borderRadius: BorderRadius.circular(10),
@@ -2367,7 +1419,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         ),
 
         const Padding(
-          padding: EdgeInsets.fromLTRB(18, 12, 16, 6),
+          padding: EdgeInsets.fromLTRB(18, 6, 16, 6),
           child: Text(
             'ACTIVE PLAYLISTS',
             style: TextStyle(color: Color(0xFF71717A), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8),
@@ -2426,6 +1478,135 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                           await PreferencesService.setActivePlaylistId(p.id);
                           setState(() {
                             _activePlaylist = p;
+                          });
+                          _loadActiveViewContent();
+                        },
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddToVortexTubeTabContent() {
+    final categories = _getFilteredPanelCategories();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sub-tabs: Live TV, Movies, Series
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              _buildSubCategoryTab(0, 'Live TV'),
+              const SizedBox(width: 6),
+              _buildSubCategoryTab(1, 'Movies'),
+              const SizedBox(width: 6),
+              _buildSubCategoryTab(2, 'Series'),
+            ],
+          ),
+        ),
+
+        // Search Category Input
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1F1F1F),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF2A2A2A)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, color: Color(0xFF71717A), size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _categorySearchController,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: const InputDecoration(
+                      hintText: 'Search categories...',
+                      hintStyle: TextStyle(color: Color(0xFF71717A), fontSize: 12),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        _categorySearchQuery = val;
+                      });
+                    },
+                  ),
+                ),
+                if (_categorySearchQuery.isNotEmpty)
+                  InkWell(
+                    onTap: () {
+                      _categorySearchController.clear();
+                      setState(() {
+                        _categorySearchQuery = '';
+                      });
+                    },
+                    child: const Icon(Icons.close_rounded, color: Color(0xFF71717A), size: 16),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // Category List with Favoriting
+        Expanded(
+          child: categories.isEmpty
+              ? const Center(
+                  child: Text('No categories found', style: TextStyle(color: Color(0xFF888888))),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  itemCount: categories.length,
+                  itemBuilder: (context, idx) {
+                    final cat = categories[idx];
+                    final isFav = _favoriteCategories.contains(cat);
+                    final isRowFocused = _currentZone == VortexZone.rightPanel && _panelFocusIndex == idx;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration: BoxDecoration(
+                        color: isRowFocused ? const Color(0xFF282828) : const Color(0xFF1B1B1B),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isRowFocused ? Colors.white : const Color(0xFF2A2A2A),
+                          width: isRowFocused ? 2 : 1,
+                        ),
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        title: Text(
+                          cat,
+                          style: TextStyle(
+                            color: isRowFocused ? Colors.white : const Color(0xFFD4D4D8),
+                            fontWeight: isRowFocused ? FontWeight.bold : FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Icon(
+                          isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: isFav ? const Color(0xFFFF0000) : const Color(0xFF71717A),
+                          size: 20,
+                        ),
+                        onTap: () async {
+                          final newFav = await PreferencesService.toggleFavoriteCategory(cat);
+                          setState(() {
+                            if (newFav) {
+                              _favoriteCategories.add(cat);
+                            } else {
+                              _favoriteCategories.remove(cat);
+                            }
                           });
                           _loadActiveViewContent();
                         },
@@ -2545,12 +1726,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                       padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                       child: Divider(color: Color(0xFF202020), height: 1),
                     ),
-                    _buildSidebarButton(VortexNavTarget.addMore, Icons.add_circle_outline_rounded, 'Add More', 5),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                      child: Divider(color: Color(0xFF202020), height: 1),
-                    ),
-                    _buildSidebarButton(VortexNavTarget.settings, Icons.settings_outlined, 'Settings', 6),
+                    _buildSidebarButton(VortexNavTarget.settings, Icons.settings_outlined, 'Settings', 5),
                   ],
                 ),
               ),
@@ -2651,43 +1827,23 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildSidebarButton(VortexNavTarget target, IconData icon, String label, int navIndex) {
-    final isActive = _activeNav == target;
+    // When in sidebar zone, navigation focus takes immediate precedence so the white pill follows smoothly
     final isFocused = _currentZone == VortexZone.sidebar && _focusedNavIndex == navIndex;
-
-    // Matching HTML reference:
-    // Active pill: bg-[#eeeeee] (activePill), text-black, bold, rounded-full, shadow
-    // Focused + Active: white border ring on light pill
-    // Focused only: subtle highlight with crisp white border
-    // Inactive: text-[#a3a3a3], hover:text-white, rounded-full
-    // In collapsed mode: perfectly centered 22px icon, labels hidden smoothly
+    final isActive = _activeNav == target;
+    final isHighlighted = isFocused || (isActive && _currentZone != VortexZone.sidebar);
 
     Color backgroundColor;
-    Border? border;
     Color iconColor;
     Color textColor;
     FontWeight fontWeight;
 
-    if (isActive && isFocused) {
+    if (isHighlighted) {
       backgroundColor = const Color(0xFFEEEEEE);
-      border = Border.all(color: const Color(0xFFFF0000), width: 2.5);
       iconColor = Colors.black;
       textColor = Colors.black;
-      fontWeight = FontWeight.bold;
-    } else if (isActive) {
-      backgroundColor = const Color(0xFFEEEEEE);
-      border = null;
-      iconColor = Colors.black;
-      textColor = Colors.black;
-      fontWeight = FontWeight.bold;
-    } else if (isFocused) {
-      backgroundColor = Colors.white.withValues(alpha: 0.15);
-      border = Border.all(color: Colors.white, width: 2);
-      iconColor = Colors.white;
-      textColor = Colors.white;
       fontWeight = FontWeight.bold;
     } else {
       backgroundColor = Colors.transparent;
-      border = null;
       iconColor = const Color(0xFFA3A3A3);
       textColor = const Color(0xFFA3A3A3);
       fontWeight = FontWeight.w500;
@@ -2707,8 +1863,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           },
           borderRadius: BorderRadius.circular(999),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
             height: 44,
             padding: EdgeInsets.symmetric(
               horizontal: _isSidebarExpanded ? 16 : 0,
@@ -2716,11 +1872,11 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             decoration: BoxDecoration(
               color: backgroundColor,
               borderRadius: BorderRadius.circular(999),
-              border: border,
-              boxShadow: isActive
+              border: null,
+              boxShadow: isHighlighted
                   ? [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
+                        color: Colors.black.withValues(alpha: 0.25),
                         blurRadius: 4,
                         offset: const Offset(0, 1),
                       ),
@@ -3034,14 +2190,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _openAddMorePanel,
+              onPressed: () => _openSettingsPanel(initialTab: 1),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF0000),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
-              icon: const Icon(Icons.add_circle_outline_rounded),
+              icon: const Icon(Icons.favorite_rounded),
               label: const Text('Add Categories Now', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
@@ -3065,7 +2221,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'Use "Add More" on the sidebar to add more favorite categories to VortexTube.',
+              'Use "Settings -> Add to VortexTube" to add more favorite categories.',
               style: TextStyle(color: Color(0xFF888888), fontSize: 13),
             ),
           ],
