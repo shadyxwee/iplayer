@@ -74,15 +74,21 @@ class RustService {
   /// Stalker / MAC portal handshake and stream link generator.
   static Future<Map<String, String>> getStalkerStreamHeaders(
     String portalUrl,
-    String macAddress,
-    String cmd,
-  ) async {
+    String macAddress, {
+    String? token,
+  }) async {
     final baseUrl = portalUrl.replaceAll(RegExp(r'/$'), '');
-    return {
+    final headers = {
       'User-Agent':
           'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-      'Cookie': 'mac=$macAddress; stb_lang=en; timezone=Europe/London',
+      'Cookie': 'mac=$macAddress; stb_lang=en; timezone=Europe/London${token != null ? "; token=$token" : ""}',
       'Referer': '$baseUrl/c/',
+      'Connection': 'Keep-Alive',
+      'Accept-Encoding': 'gzip',
     };
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
   }
 }

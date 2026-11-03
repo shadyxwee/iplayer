@@ -150,13 +150,18 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
         native.setProperty('demuxer-readahead-secs', '15');
       } catch (_) {}
 
+      final Map<String, String> headers = {
+        'User-Agent': channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10) IPTV-Player/1.0',
+        'Connection': 'keep-alive',
+      };
+      if (channel.referer != null) {
+        headers['Referer'] = channel.referer!;
+      }
+
       await newPlayer.open(
         Media(
           channel.url,
-          httpHeaders: {
-            'User-Agent': channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10) IPTV-Player/1.0',
-            if (channel.referer != null) 'Referer': channel.referer!,
-          },
+          httpHeaders: headers,
         ),
         play: true,
       );

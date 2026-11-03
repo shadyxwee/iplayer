@@ -38,13 +38,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     
     XtreamService? xtreamService;
     final playlistId = widget.series.playlistId;
+    Playlist? currentPlaylist;
     if (playlistId != null) {
-      final playlist = await DatabaseService.getPlaylistById(playlistId);
-      if (playlist != null && playlist.isXtreamCodes) {
+      currentPlaylist = await DatabaseService.getPlaylistById(playlistId);
+      if (currentPlaylist != null && currentPlaylist.isXtreamCodes) {
         xtreamService = XtreamService(
-          baseUrl: playlist.url,
-          username: playlist.username!,
-          password: playlist.password!,
+          baseUrl: currentPlaylist.url,
+          username: currentPlaylist.username!,
+          password: currentPlaylist.password!,
         );
       }
     }
@@ -52,7 +53,23 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final metadataService = MetadataService(xtreamService: xtreamService);
     
     MediaMetadata meta;
-    if (xtreamService != null) {
+    if (currentPlaylist != null && currentPlaylist.isStalker) {
+       final seriesId = widget.series.id ?? '0';
+       final stalkerService = StalkerService(
+         portalUrl: currentPlaylist.url,
+         macAddress: currentPlaylist.macAddress ?? '00:1A:79:00:00:00',
+       );
+       meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
+       try {
+         final info = await stalkerService.getSeriesInfo(seriesId);
+         if (info['success'] == true && info['data'] != null) {
+           _seriesData = info['data'];
+           _selectedSeason = '1';
+         }
+       } catch (e) {
+         print('Error loading Stalker series info: $e');
+       }
+    } else if (xtreamService != null) {
        final seriesId = int.tryParse(widget.series.id ?? '0') ?? 0;
        final seriesItem = SeriesItem(
          seriesId: seriesId,
