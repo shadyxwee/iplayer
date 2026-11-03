@@ -17,6 +17,7 @@ import 'playlist_manager_screen.dart';
 import 'profiles_screen.dart';
 import 'series_grid_screen.dart';
 import 'settings_screen.dart';
+import 'vortextube_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final bool showWelcomeDialog;
@@ -50,7 +51,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final FocusNode _playlistsBtnFocusNode = FocusNode();
   final FocusNode _catchUpBtnFocusNode = FocusNode();
-  final FocusNode _favoritesBtnFocusNode = FocusNode();
+  final FocusNode _vortexTubeBtnFocusNode = FocusNode();
   final FocusNode _settingsBtnFocusNode = FocusNode();
 
   @override
@@ -95,7 +96,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     _playlistsBtnFocusNode.dispose();
     _catchUpBtnFocusNode.dispose();
-    _favoritesBtnFocusNode.dispose();
+    _vortexTubeBtnFocusNode.dispose();
     _settingsBtnFocusNode.dispose();
 
     super.dispose();
@@ -622,19 +623,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 14),
                 _buildSideButton(
-                  focusNode: _favoritesBtnFocusNode,
-                  icon: Icons.movie_outlined,
-                  title: 'Favorites',
-                  isFavoritesIcon: true,
+                  focusNode: _vortexTubeBtnFocusNode,
+                  icon: Icons.play_circle_fill_rounded,
+                  title: 'VortexTube',
+                  isVortexTubeIcon: true,
                   onTap: () {
                     Navigator.push(
                       context,
-                      SmoothPageRoute(
-                        child: ContentGridScreen(
-                          contentType: ContentType.live,
-                          title: l10n.myFavorites,
-                        ),
-                      ),
+                      SmoothPageRoute(child: const VortexTubeScreen()),
                     );
                   },
                 ),
@@ -801,6 +797,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String title,
     required VoidCallback onTap,
     bool isFavoritesIcon = false,
+    bool isVortexTubeIcon = false,
   }) {
     bool isHovered = false;
 
@@ -863,27 +860,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         height: 48,
                         alignment: Alignment.center,
                         margin: const EdgeInsets.only(right: 16),
-                        child: isFavoritesIcon
-                            ? Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.crop_16_9,
-                                    size: 32,
-                                    color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                                  ),
-                                  Icon(
-                                    Icons.favorite,
-                                    size: 14,
-                                    color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                                  ),
-                                ],
+                        child: isVortexTubeIcon
+                            ? Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF0000),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
                               )
-                            : Icon(
-                                icon,
-                                size: 30,
-                                color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
-                              ),
+                            : isFavoritesIcon
+                                ? Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.crop_16_9,
+                                        size: 32,
+                                        color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                                      ),
+                                      Icon(
+                                        Icons.favorite,
+                                        size: 14,
+                                        color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                                      ),
+                                    ],
+                                  )
+                                : Icon(
+                                    icon,
+                                    size: 30,
+                                    color: active ? const Color(0xFFA5B4FC) : const Color(0xFF818CF8),
+                                  ),
                       ),
                       Text(
                         title,

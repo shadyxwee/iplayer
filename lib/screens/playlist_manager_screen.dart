@@ -114,7 +114,7 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
             final channel = Channel()
               ..name = movie.name
               ..url = movie.streamUrl
-              ..logo = movie.posterUrl
+              ..logo = movie.streamIcon ?? movie.posterUrl
               ..group = movie.categoryName
               ..description = movie.plot
               ..tvgId = movie.streamId
@@ -133,7 +133,7 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
             final channel = Channel()
               ..name = series.name
               ..url = 'stalker://series/${series.id}'
-              ..logo = series.posterUrl
+              ..logo = series.cover ?? series.posterUrl
               ..group = series.categoryName
               ..description = series.plot
               ..userAgent = StalkerService.userAgent

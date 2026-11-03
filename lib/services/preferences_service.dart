@@ -71,4 +71,31 @@ class PreferencesService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('$_lastFocusedChannelPrefix$category', channelName);
   }
+
+  static const String _favoriteCategoriesKey = 'favorite_categories';
+
+  static Future<List<String>> getFavoriteCategories() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_favoriteCategoriesKey) ?? [];
+  }
+
+  static Future<bool> isFavoriteCategory(String category) async {
+    final list = await getFavoriteCategories();
+    return list.contains(category);
+  }
+
+  static Future<bool> toggleFavoriteCategory(String category) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = (prefs.getStringList(_favoriteCategoriesKey) ?? []).toList();
+    bool isNowFav;
+    if (list.contains(category)) {
+      list.remove(category);
+      isNowFav = false;
+    } else {
+      list.add(category);
+      isNowFav = true;
+    }
+    await prefs.setStringList(_favoriteCategoriesKey, list);
+    return isNowFav;
+  }
 }

@@ -39,6 +39,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   // Data State
   List<String> _allCategories = ['All'];
   List<String> _filteredCategories = ['All'];
+  Set<String> _favoriteCategories = {};
   String _selectedCategory = 'All';
   List<Channel> _allChannels = [];
   List<Channel> _filteredChannels = [];
@@ -108,6 +109,10 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       displayChannels = _generateSampleChannels();
     }
 
+    // Load favorite categories
+    final favCategoriesList = await PreferencesService.getFavoriteCategories();
+    final favCategoriesSet = favCategoriesList.toSet();
+
     // State persistence: restore last selected category
     final savedCategory = await PreferencesService.getLastSelectedCategory();
     String activeCategory = 'All';
@@ -138,6 +143,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       _filteredChannels = initialFilteredChannels;
       _allCategories = categories;
       _filteredCategories = categories;
+      _favoriteCategories = favCategoriesSet;
       _selectedCategory = activeCategory;
       _focusedCategoryIndex = catIndex != -1 ? catIndex : 0;
       _focusedChannelIndex = initialChannelIndex;
@@ -721,15 +727,43 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                               ),
                             ),
                           ),
-                          child: Text(
-                            category,
-                            style: TextStyle(
-                              color: isFocused || isSelected ? Colors.white : const Color(0xFF737C98),
-                              fontSize: 11,
-                              fontWeight: isSelected || isFocused ? FontWeight.bold : FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  category,
+                                  style: TextStyle(
+                                    color: isFocused || isSelected ? Colors.white : const Color(0xFF737C98),
+                                    fontSize: 11,
+                                    fontWeight: isSelected || isFocused ? FontWeight.bold : FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (category != 'All')
+                                GestureDetector(
+                                  onTap: () async {
+                                    final isNowFav = await PreferencesService.toggleFavoriteCategory(category);
+                                    setState(() {
+                                      if (isNowFav) {
+                                        _favoriteCategories.add(category);
+                                      } else {
+                                        _favoriteCategories.remove(category);
+                                      }
+                                    });
+                                  },
+                                  child: Icon(
+                                    _favoriteCategories.contains(category)
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    size: 14,
+                                    color: _favoriteCategories.contains(category)
+                                        ? const Color(0xFFE5283B)
+                                        : const Color(0xFF555D77),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       );
