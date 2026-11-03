@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/channel.dart';
 import '../models/playlist.dart';
+import '../models/series.dart';
 import '../services/database_service.dart';
 import '../services/preferences_service.dart';
+import '../services/series_parser.dart';
 import '../services/vortextube_service.dart';
-import 'mobile_video_player_screen.dart';
 import '../widgets/smooth_page_route.dart';
+import 'mobile_video_player_screen.dart';
+import 'series_detail_screen.dart';
 import 'settings_screen.dart';
 import 'video_player_screen.dart';
 
@@ -23,7 +26,9 @@ enum VortexNavTarget {
   settings,
 }
 
-enum VortexZone { sidebar, searchBar, content }
+enum VortexZone { sidebar, searchBar, filterBar, content }
+
+enum VortexFilter { all, recent, topRated, inProgress }
 
 class VortexTubeScreen extends StatefulWidget {
   const VortexTubeScreen({super.key});
@@ -41,12 +46,18 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   // Feed & Scoped Content Data
   List<VortexShelf> _shelves = [];
   List<Channel> _scopedItems = [];
+  List<Channel> _filteredScopedItems = [];
   Set<String> _favoriteCategories = {};
   Playlist? _activePlaylist;
   bool _isLoading = true;
 
+  // Filter State
+  VortexFilter _activeFilter = VortexFilter.all;
+  String _selectedCategoryFilter = 'All';
+  int _focusedFilterIndex = 0;
+
   // Infinite Scroll & Pagination
-  int _displayedCount = 24;
+  int _displayedCount = 36;
   final int _pageSize = 24;
 
   // Search State
@@ -58,6 +69,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   // Scroll Controllers
   final ScrollController _mainScrollController = ScrollController();
   final Map<int, ScrollController> _shelfScrollControllers = {};
+  final ScrollController _filterBarScrollController = ScrollController();
 
   // Focus indices in content zone
   int _focusedShelfIndex = 0;
@@ -72,7 +84,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     {'target': VortexNavTarget.liveTv, 'icon': Icons.live_tv_rounded, 'label': 'Live TV'},
     {'target': VortexNavTarget.series, 'icon': Icons.video_collection_outlined, 'label': 'Series'},
     {'target': VortexNavTarget.addMore, 'icon': Icons.add_circle_outline_rounded, 'label': 'Add More'},
-    {'target': VortexNavTarget.goToHome, 'icon': Icons.dashboard_outlined, 'label': 'Go To Home'},
+    {'target': VortexNavTarget.goToHome, 'icon': Icons.logout_rounded, 'label': 'Go To Home'},
     {'target': VortexNavTarget.settings, 'icon': Icons.settings_outlined, 'label': 'Settings'},
   ];
 
@@ -90,6 +102,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     _screenFocusNode.dispose();
     _searchFocusNode.dispose();
     _searchController.dispose();
+    _filterBarScrollController.dispose();
     for (final c in _shelfScrollControllers.values) {
       c.dispose();
     }
@@ -97,8 +110,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   void _onScroll() {
-    if (_mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 200) {
-      if (_displayedCount < _scopedItems.length) {
+    if (_mainScrollController.hasClients &&
+        _mainScrollController.position.pixels >= _mainScrollController.position.maxScrollExtent - 300) {
+      if (_displayedCount < _filteredScopedItems.length) {
         setState(() {
           _displayedCount += _pageSize;
         });
@@ -162,15 +176,51 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       filtered.sort((a, b) => VortexTubeService.scoreItem(channel: b, lovedCategories: lovedCategories)
           .compareTo(VortexTubeService.scoreItem(channel: a, lovedCategories: lovedCategories)));
 
+      _scopedItems = filtered;
+      _applyFilter();
+
       if (mounted) {
         setState(() {
-          _scopedItems = filtered;
           _displayedCount = _pageSize;
           _isLoading = false;
           _focusedGridIndex = 0;
         });
       }
     }
+  }
+
+  void _applyFilter() {
+    var items = List<Channel>.from(_scopedItems);
+
+    if (_selectedCategoryFilter != 'All') {
+      items = items.where((c) => c.group == _selectedCategoryFilter).toList();
+    }
+
+    switch (_activeFilter) {
+      case VortexFilter.all:
+        break;
+      case VortexFilter.recent:
+        items.sort((a, b) => (b.lastPlayed ?? DateTime(2000)).compareTo(a.lastPlayed ?? DateTime(2000)));
+        break;
+      case VortexFilter.topRated:
+        items.sort((a, b) => b.rating.compareTo(a.rating));
+        break;
+      case VortexFilter.inProgress:
+        items = items.where((c) => c.watchedMilliseconds > 0).toList();
+        break;
+    }
+
+    _filteredScopedItems = items;
+  }
+
+  List<String> _getAvailableCategoryFilters() {
+    final set = <String>{'All'};
+    for (final item in _scopedItems) {
+      if (item.group != null && item.group!.isNotEmpty) {
+        set.add(item.group!);
+      }
+    }
+    return set.toList();
   }
 
   void _showAddMorePopup() async {
@@ -386,6 +436,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     }
   }
 
+  int _getColumnCount() {
+    if (_activeNav == VortexNavTarget.liveTv) {
+      return 10; // 10 items in one row for Live TV circular channel badges
+    }
+    return 6; // 6 items in one row for Movies & Series posters
+  }
+
   void _moveUp() {
     setState(() {
       switch (_currentZone) {
@@ -396,19 +453,25 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           break;
         case VortexZone.searchBar:
           break;
+        case VortexZone.filterBar:
+          _currentZone = VortexZone.searchBar;
+          break;
         case VortexZone.content:
           if (_activeNav == VortexNavTarget.home) {
             if (_focusedShelfIndex > 0) {
               _focusedShelfIndex--;
               _focusedItemIndex = 0;
+              _ensureVisibleShelf(_focusedShelfIndex);
             } else {
-              _currentZone = VortexZone.searchBar;
+              _currentZone = VortexZone.filterBar;
             }
           } else {
-            if (_focusedGridIndex >= 4) {
-              _focusedGridIndex -= 4;
+            final cols = _getColumnCount();
+            if (_focusedGridIndex >= cols) {
+              _focusedGridIndex -= cols;
+              _ensureVisibleGridItem(_focusedGridIndex);
             } else {
-              _currentZone = VortexZone.searchBar;
+              _currentZone = VortexZone.filterBar;
             }
           }
           break;
@@ -425,6 +488,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           }
           break;
         case VortexZone.searchBar:
+          _currentZone = VortexZone.filterBar;
+          break;
+        case VortexZone.filterBar:
           _currentZone = VortexZone.content;
           _focusedShelfIndex = 0;
           _focusedItemIndex = 0;
@@ -435,10 +501,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             if (_focusedShelfIndex < _shelves.length - 1) {
               _focusedShelfIndex++;
               _focusedItemIndex = 0;
+              _ensureVisibleShelf(_focusedShelfIndex);
             }
           } else {
-            if (_focusedGridIndex + 4 < _scopedItems.length) {
-              _focusedGridIndex += 4;
+            final cols = _getColumnCount();
+            if (_focusedGridIndex + cols < _filteredScopedItems.length) {
+              _focusedGridIndex += cols;
+              _ensureVisibleGridItem(_focusedGridIndex);
             }
           }
           break;
@@ -454,16 +523,27 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         case VortexZone.searchBar:
           _currentZone = VortexZone.sidebar;
           break;
+        case VortexZone.filterBar:
+          if (_focusedFilterIndex > 0) {
+            _focusedFilterIndex--;
+            _ensureVisibleFilter(_focusedFilterIndex);
+          } else {
+            _currentZone = VortexZone.sidebar;
+          }
+          break;
         case VortexZone.content:
           if (_activeNav == VortexNavTarget.home) {
             if (_focusedItemIndex > 0) {
               _focusedItemIndex--;
+              _ensureVisibleShelfItem(_focusedShelfIndex, _focusedItemIndex);
             } else {
               _currentZone = VortexZone.sidebar;
             }
           } else {
-            if (_focusedGridIndex % 4 != 0) {
+            final cols = _getColumnCount();
+            if (_focusedGridIndex % cols != 0) {
               _focusedGridIndex--;
+              _ensureVisibleGridItem(_focusedGridIndex);
             } else {
               _currentZone = VortexZone.sidebar;
             }
@@ -480,6 +560,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           _currentZone = VortexZone.content;
           break;
         case VortexZone.searchBar:
+          _currentZone = VortexZone.filterBar;
+          break;
+        case VortexZone.filterBar:
+          final filterCount = 4 + _getAvailableCategoryFilters().length;
+          if (_focusedFilterIndex < filterCount - 1) {
+            _focusedFilterIndex++;
+            _ensureVisibleFilter(_focusedFilterIndex);
+          }
           break;
         case VortexZone.content:
           if (_activeNav == VortexNavTarget.home) {
@@ -487,11 +575,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
               final shelf = _shelves[_focusedShelfIndex];
               if (_focusedItemIndex < shelf.items.length - 1) {
                 _focusedItemIndex++;
+                _ensureVisibleShelfItem(_focusedShelfIndex, _focusedItemIndex);
               }
             }
           } else {
-            if (_focusedGridIndex < _scopedItems.length - 1 && (_focusedGridIndex + 1) % 4 != 0) {
+            final cols = _getColumnCount();
+            if (_focusedGridIndex < _filteredScopedItems.length - 1 && (_focusedGridIndex + 1) % cols != 0) {
               _focusedGridIndex++;
+              _ensureVisibleGridItem(_focusedGridIndex);
             }
           }
           break;
@@ -508,6 +599,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       case VortexZone.searchBar:
         _searchFocusNode.requestFocus();
         break;
+      case VortexZone.filterBar:
+        _applyFocusedFilter();
+        break;
       case VortexZone.content:
         if (_activeNav == VortexNavTarget.home) {
           if (_focusedShelfIndex < _shelves.length) {
@@ -517,11 +611,45 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             }
           }
         } else {
-          if (_focusedGridIndex < _scopedItems.length) {
-            _playItem(_scopedItems[_focusedGridIndex]);
+          if (_focusedGridIndex < _filteredScopedItems.length) {
+            _playItem(_filteredScopedItems[_focusedGridIndex]);
           }
         }
         break;
+    }
+  }
+
+  void _applyFocusedFilter() {
+    final catFilters = _getAvailableCategoryFilters();
+    if (_focusedFilterIndex == 0) {
+      setState(() {
+        _activeFilter = VortexFilter.all;
+        _selectedCategoryFilter = 'All';
+        _applyFilter();
+      });
+    } else if (_focusedFilterIndex == 1) {
+      setState(() {
+        _activeFilter = VortexFilter.recent;
+        _applyFilter();
+      });
+    } else if (_focusedFilterIndex == 2) {
+      setState(() {
+        _activeFilter = VortexFilter.topRated;
+        _applyFilter();
+      });
+    } else if (_focusedFilterIndex == 3) {
+      setState(() {
+        _activeFilter = VortexFilter.inProgress;
+        _applyFilter();
+      });
+    } else {
+      final catIdx = _focusedFilterIndex - 4;
+      if (catIdx < catFilters.length) {
+        setState(() {
+          _selectedCategoryFilter = catFilters[catIdx];
+          _applyFilter();
+        });
+      }
     }
   }
 
@@ -554,6 +682,27 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   void _playItem(Channel item) {
+    // For Series, open SeriesDetailScreen where users can choose seasons & episodes
+    if (item.contentType == ContentType.series) {
+      final series = Series(
+        id: item.tvgId?.toString() ?? item.url.replaceAll('stalker://series/', '').replaceAll('xtream://series/', ''),
+        playlistId: item.playlistId ?? _activePlaylist?.id,
+        name: SeriesParser.groupIntoSeries([item]).values.firstOrNull?.name ?? item.name,
+        group: item.group ?? 'Series',
+        logo: item.logo,
+        poster: item.logo,
+        rating: item.rating,
+        seasons: [],
+      );
+
+      Navigator.push(
+        context,
+        SmoothPageRoute(child: SeriesDetailScreen(series: series)),
+      ).then((_) => _loadActiveViewContent());
+      return;
+    }
+
+    // For Live TV & Movies, launch player
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -562,6 +711,67 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             : VideoPlayerScreen(channel: item),
       ),
     ).then((_) => _loadActiveViewContent());
+  }
+
+  /// Scrolling with smooth center alignment
+  void _ensureVisibleShelf(int shelfIndex) {
+    if (!_mainScrollController.hasClients) return;
+    const double shelfHeight = 260.0;
+    final double viewportHeight = _mainScrollController.position.viewportDimension;
+    final double targetOffset = (shelfIndex * shelfHeight) - (viewportHeight / 3);
+    final double clampedOffset = targetOffset.clamp(0.0, _mainScrollController.position.maxScrollExtent);
+
+    _mainScrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _ensureVisibleShelfItem(int shelfIndex, int itemIndex) {
+    final controller = _shelfScrollControllers[shelfIndex];
+    if (controller == null || !controller.hasClients) return;
+
+    final isCircular = _shelves[shelfIndex].isCircular;
+    final double itemWidth = isCircular ? 110.0 : 220.0;
+    final double viewportWidth = controller.position.viewportDimension;
+    final double targetOffset = (itemIndex * itemWidth) - (viewportWidth / 2) + (itemWidth / 2);
+    final double clampedOffset = targetOffset.clamp(0.0, controller.position.maxScrollExtent);
+
+    controller.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _ensureVisibleGridItem(int gridIndex) {
+    if (!_mainScrollController.hasClients) return;
+    final cols = _getColumnCount();
+    final row = gridIndex ~/ cols;
+    final double rowHeight = _activeNav == VortexNavTarget.liveTv ? 130.0 : 250.0;
+    final double viewportHeight = _mainScrollController.position.viewportDimension;
+    final double targetOffset = (row * rowHeight) - (viewportHeight / 2) + (rowHeight / 2);
+    final double clampedOffset = targetOffset.clamp(0.0, _mainScrollController.position.maxScrollExtent);
+
+    _mainScrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _ensureVisibleFilter(int filterIndex) {
+    if (!_filterBarScrollController.hasClients) return;
+    const double filterWidth = 110.0;
+    final double targetOffset = (filterIndex * filterWidth) - 100.0;
+    final double clampedOffset = targetOffset.clamp(0.0, _filterBarScrollController.position.maxScrollExtent);
+
+    _filterBarScrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -580,12 +790,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                 child: Column(
                   children: [
                     _buildTopHeader(),
+                    _buildTopFilterBar(),
                     Expanded(
                       child: _isLoading
                           ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF0000)))
                           : _activeNav == VortexNavTarget.home
                               ? (_shelves.isEmpty ? _buildEmptyState() : _buildShelvesList())
-                              : (_scopedItems.isEmpty ? _buildEmptyScopedState() : _buildScopedGridView()),
+                              : (_filteredScopedItems.isEmpty ? _buildEmptyScopedState() : _buildScopedGridView()),
                     ),
                   ],
                 ),
@@ -606,9 +817,36 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       ),
       child: Column(
         children: [
+          // VortexTube Logo & Title directly above Playlist Name
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF0000),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'VortexTube',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Profile / Playlist Name Button
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: InkWell(
               onTap: () {},
               borderRadius: BorderRadius.circular(24),
@@ -620,14 +858,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.account_circle, color: Color(0xFFAAAAAA), size: 28),
+                    const Icon(Icons.account_circle, color: Color(0xFFAAAAAA), size: 26),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        _activePlaylist?.name ?? 'VortexTube',
+                        _activePlaylist?.name ?? 'My Playlist',
                         style: const TextStyle(
                           color: Color(0xFFE0E0E0),
-                          fontSize: 15,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w600,
                         ),
                         maxLines: 1,
@@ -734,40 +972,39 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildTopHeader() {
-    final isFocused = _currentZone == VortexZone.searchBar;
+    final isSearchFocused = _currentZone == VortexZone.searchBar;
 
     return Container(
-      height: 64,
+      height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 32),
       decoration: const BoxDecoration(
         color: Color(0xFF0F0F0F),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Search Capsule
           Container(
             constraints: const BoxConstraints(maxWidth: 360),
-            height: 40,
+            height: 38,
             decoration: BoxDecoration(
               color: const Color(0xFF2A2A2A).withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: isFocused ? Colors.white : Colors.transparent,
-                width: isFocused ? 2 : 1,
+                color: isSearchFocused ? Colors.white : Colors.transparent,
+                width: isSearchFocused ? 2 : 1,
               ),
             ),
             child: Row(
               children: [
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 14),
-                  child: Icon(Icons.search_rounded, color: Color(0xFFAAAAAA), size: 20),
+                  child: Icon(Icons.search_rounded, color: Color(0xFFAAAAAA), size: 18),
                 ),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: const TextStyle(color: Colors.white, fontSize: 13.5),
                     decoration: const InputDecoration(
                       hintText: 'Search VortexTube...',
                       hintStyle: TextStyle(color: Color(0xFF888888), fontSize: 13),
@@ -789,37 +1026,108 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     },
                     child: const Padding(
                       padding: EdgeInsets.only(right: 12),
-                      child: Icon(Icons.clear, color: Color(0xFF888888), size: 18),
+                      child: Icon(Icons.clear, color: Color(0xFF888888), size: 16),
                     ),
                   ),
               ],
             ),
           ),
-
-          // VortexTube Logo Badge
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF0000),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'VortexTube',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.8,
-                ),
-              ),
-            ],
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTopFilterBar() {
+    final catFilters = _getAvailableCategoryFilters();
+
+    final filterPills = <Widget>[
+      _buildFilterPill('All', _activeFilter == VortexFilter.all && _selectedCategoryFilter == 'All', 0, () {
+        setState(() {
+          _activeFilter = VortexFilter.all;
+          _selectedCategoryFilter = 'All';
+          _applyFilter();
+        });
+      }),
+      _buildFilterPill('Recently Watched', _activeFilter == VortexFilter.recent, 1, () {
+        setState(() {
+          _activeFilter = VortexFilter.recent;
+          _applyFilter();
+        });
+      }),
+      _buildFilterPill('Top Rated', _activeFilter == VortexFilter.topRated, 2, () {
+        setState(() {
+          _activeFilter = VortexFilter.topRated;
+          _applyFilter();
+        });
+      }),
+      _buildFilterPill('In Progress', _activeFilter == VortexFilter.inProgress, 3, () {
+        setState(() {
+          _activeFilter = VortexFilter.inProgress;
+          _applyFilter();
+        });
+      }),
+    ];
+
+    for (int i = 0; i < catFilters.length; i++) {
+      final cat = catFilters[i];
+      if (cat == 'All') continue;
+      final idx = 4 + i;
+      filterPills.add(
+        _buildFilterPill(cat, _selectedCategoryFilter == cat, idx, () {
+          setState(() {
+            _selectedCategoryFilter = cat;
+            _applyFilter();
+          });
+        }),
+      );
+    }
+
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      alignment: Alignment.centerLeft,
+      child: ListView(
+        controller: _filterBarScrollController,
+        scrollDirection: Axis.horizontal,
+        children: filterPills,
+      ),
+    );
+  }
+
+  Widget _buildFilterPill(String label, bool isSelected, int filterIndex, VoidCallback onTap) {
+    final isFocused = _currentZone == VortexZone.filterBar && _focusedFilterIndex == filterIndex;
+
+    return Container(
+      margin: const EdgeInsets.only(right: 10),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _currentZone = VortexZone.filterBar;
+            _focusedFilterIndex = filterIndex;
+          });
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFFF1F1F1)
+                : isFocused
+                    ? const Color(0xFF3F3F3F)
+                    : const Color(0xFF272727),
+            borderRadius: BorderRadius.circular(16),
+            border: isFocused ? Border.all(color: Colors.white, width: 2) : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.black : const Color(0xFFF1F1F1),
+              fontSize: 12.5,
+              fontWeight: isSelected || isFocused ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -936,7 +1244,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: shelf.isCircular ? 130 : 210,
+            height: shelf.isCircular ? 130 : 220,
             child: ListView.builder(
               controller: controller,
               scrollDirection: Axis.horizontal,
@@ -949,7 +1257,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
                 return shelf.isCircular
                     ? _buildCircularCard(item, isFocused, shelfIndex, itemIndex)
-                    : _buildRectangularCard(item, isFocused, shelfIndex, itemIndex);
+                    : _buildPosterCard(item, isFocused, shelfIndex, itemIndex);
               },
             ),
           ),
@@ -969,8 +1277,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         _playItem(item);
       },
       child: Container(
-        width: 100,
-        margin: const EdgeInsets.only(right: 18),
+        width: 95,
+        margin: const EdgeInsets.only(right: 16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -988,22 +1296,22 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                 boxShadow: isFocused
                     ? [
                         BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          blurRadius: 12,
+                          color: Colors.white.withValues(alpha: 0.35),
+                          blurRadius: 14,
                           spreadRadius: 2,
                         ),
                       ]
                     : [],
               ),
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               child: ClipOval(
                 child: item.logo != null && item.logo!.isNotEmpty
                     ? Image.network(
                         item.logo!,
-                        fit: BoxFit.contain, // Fixed: properly contained, not zoomed
-                        errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 28),
+                        fit: BoxFit.contain, // Fixed: logo properly contained
+                        errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 26),
                       )
-                    : const Icon(Icons.tv, color: Colors.white70, size: 28),
+                    : const Icon(Icons.tv, color: Colors.white70, size: 26),
               ),
             ),
             const SizedBox(height: 8),
@@ -1024,7 +1332,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     );
   }
 
-  Widget _buildRectangularCard(Channel item, bool isFocused, int shelfIndex, int itemIndex) {
+  Widget _buildPosterCard(Channel item, bool isFocused, int shelfIndex, int itemIndex) {
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -1036,7 +1344,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 280, // Aspect video ratio ~16:9 like YouTube TV
+        width: 250,
         margin: const EdgeInsets.only(right: 18),
         decoration: BoxDecoration(
           color: const Color(0xFF1E1E1E),
@@ -1068,7 +1376,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                         ? Image.network(
                             item.logo!,
                             width: double.infinity,
-                            fit: BoxFit.contain, // Fixed: fit.contain prevents excessive zooming
+                            fit: BoxFit.contain,
                             errorBuilder: (_, __, ___) => const Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 40),
                           )
                         : const Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 40),
@@ -1092,11 +1400,24 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    item.group ?? 'Loved Item',
-                    style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Text(
+                        item.group ?? 'Loved Item',
+                        style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Spacer(),
+                      if (item.rating > 0) ...[
+                        const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                        const SizedBox(width: 3),
+                        Text(
+                          item.rating.toStringAsFixed(1),
+                          style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -1108,16 +1429,96 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildScopedGridView() {
-    final displayedItems = _scopedItems.take(_displayedCount).toList();
+    final displayedItems = _filteredScopedItems.take(_displayedCount).toList();
+    final isLive = _activeNav == VortexNavTarget.liveTv;
 
+    if (isLive) {
+      // 10-11 circular items in one row scrolling down until channel list ends
+      return GridView.builder(
+        controller: _mainScrollController,
+        padding: const EdgeInsets.fromLTRB(32, 16, 32, 40),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 10,
+          crossAxisSpacing: 14,
+          mainAxisSpacing: 14,
+          childAspectRatio: 0.85,
+        ),
+        itemCount: displayedItems.length,
+        itemBuilder: (context, index) {
+          final item = displayedItems[index];
+          final isFocused = _currentZone == VortexZone.content && _focusedGridIndex == index;
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _currentZone = VortexZone.content;
+                _focusedGridIndex = index;
+              });
+              _playItem(item);
+            },
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: isFocused ? 76 : 70,
+                  height: isFocused ? 76 : 70,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1F1F1F),
+                    border: Border.all(
+                      color: isFocused ? Colors.white : const Color(0xFF333333),
+                      width: isFocused ? 3 : 1,
+                    ),
+                    boxShadow: isFocused
+                        ? [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.35),
+                              blurRadius: 14,
+                              spreadRadius: 2,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  padding: const EdgeInsets.all(10),
+                  child: ClipOval(
+                    child: item.logo != null && item.logo!.isNotEmpty
+                        ? Image.network(
+                            item.logo!,
+                            fit: BoxFit.contain, // Fixed: logo properly contained
+                            errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 26),
+                          )
+                        : const Icon(Icons.tv, color: Colors.white70, size: 26),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.name,
+                  style: TextStyle(
+                    color: isFocused ? Colors.white : const Color(0xFFAAAAAA),
+                    fontSize: 11,
+                    fontWeight: isFocused ? FontWeight.bold : FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    // Movies and Series Professional Grid (6 vertical poster cards per row)
     return GridView.builder(
       controller: _mainScrollController,
       padding: const EdgeInsets.fromLTRB(32, 16, 32, 40),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+        crossAxisCount: 6,
         crossAxisSpacing: 18,
         mainAxisSpacing: 18,
-        childAspectRatio: 1.35,
+        childAspectRatio: 0.68,
       ),
       itemCount: displayedItems.length,
       itemBuilder: (context, index) {
@@ -1144,8 +1545,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
               boxShadow: isFocused
                   ? [
                       BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.25),
-                        blurRadius: 16,
+                        color: Colors.white.withValues(alpha: 0.3),
+                        blurRadius: 18,
                       ),
                     ]
                   : [],
@@ -1163,7 +1564,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                             ? Image.network(
                                 item.logo!,
                                 width: double.infinity,
-                                fit: BoxFit.contain, // Fixed: logo properly contained
+                                height: double.infinity,
+                                fit: BoxFit.cover, // Professional poster cover
                                 errorBuilder: (_, __, ___) => const Icon(Icons.movie_outlined, color: Colors.white24, size: 40),
                               )
                             : const Icon(Icons.movie_outlined, color: Colors.white24, size: 40),
@@ -1187,11 +1589,25 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        item.group ?? 'Loved',
-                        style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.group ?? 'Loved',
+                              style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (item.rating > 0) ...[
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 13),
+                            const SizedBox(width: 2),
+                            Text(
+                              item.rating.toStringAsFixed(1),
+                              style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
