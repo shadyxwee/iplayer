@@ -22,7 +22,6 @@ enum VortexNavTarget {
   liveTv,
   series,
   addMore,
-  goToHome,
   settings,
 }
 
@@ -677,7 +676,6 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     {'target': VortexNavTarget.liveTv, 'icon': Icons.live_tv_rounded, 'label': 'Live TV'},
     {'target': VortexNavTarget.series, 'icon': Icons.video_collection_outlined, 'label': 'Series'},
     {'target': VortexNavTarget.addMore, 'icon': Icons.add_circle_outline_rounded, 'label': 'Add More'},
-    {'target': VortexNavTarget.goToHome, 'icon': Icons.logout_rounded, 'label': 'Go To Home'},
     {'target': VortexNavTarget.settings, 'icon': Icons.settings_outlined, 'label': 'Settings'},
   ];
 
@@ -928,7 +926,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     return ['All', ...sorted];
   }
 
+  void _clearSearchState() {
+    _searchController.clear();
+    _searchQuery = '';
+  }
+
   void _showAddMorePopup() async {
+    _clearSearchState();
     final allChannels = await DatabaseService.getAllChannels();
     final categoriesByType = <ContentType, List<String>>{
       ContentType.live: [],
@@ -971,6 +975,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     );
 
     // Refresh feed when dialog closes
+    _clearSearchState();
     final updatedFavs = await PreferencesService.getFavoriteCategories();
     setState(() {
       _favoriteCategories = updatedFavs.toSet();
@@ -1381,6 +1386,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           // Search is the top-most item of sidebar (index 0). Cannot go above search!
           if (_focusedNavIndex > 0) {
             _focusedNavIndex--;
+            final nav = _navItems[_focusedNavIndex]['target'] as VortexNavTarget;
+            _selectNavTarget(nav);
           }
           break;
         case VortexZone.searchBar:
@@ -1440,6 +1447,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         case VortexZone.sidebar:
           if (_focusedNavIndex < _navItems.length - 1) {
             _focusedNavIndex++;
+            final nav = _navItems[_focusedNavIndex]['target'] as VortexNavTarget;
+            _selectNavTarget(nav);
           }
           break;
         case VortexZone.searchBar:
@@ -1498,11 +1507,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   void _focusSidebar() {
     _currentZone = VortexZone.sidebar;
     _isSidebarExpanded = true;
-    // Highlight the currently active page item in the sidebar
+    // Highlight and activate the sidebar item
     final activeIndex = _navItems.indexWhere((item) => item['target'] == _activeNav);
     if (activeIndex != -1) {
       _focusedNavIndex = activeIndex;
     }
+    final nav = _navItems[_focusedNavIndex]['target'] as VortexNavTarget;
+    _selectNavTarget(nav);
   }
 
   void _moveLeft() {
@@ -1684,16 +1695,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   void _selectNavTarget(VortexNavTarget target) {
     if (target == VortexNavTarget.addMore) {
+      _clearSearchState();
       _showAddMorePopup();
       return;
     }
 
-    if (target == VortexNavTarget.goToHome) {
-      Navigator.pop(context);
-      return;
-    }
-
     if (target == VortexNavTarget.settings) {
+      _clearSearchState();
       _showVortexSettingsPopup();
       return;
     }
@@ -1707,6 +1715,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       });
       return;
     }
+
+    // Always clear search input and reset search filter on section navigation
+    _clearSearchState();
 
     setState(() {
       _activeNav = target;
@@ -1959,57 +1970,35 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     ),
                   ),
 
-                  // Collapse / Expand Toggle Button
-                  if (_isSidebarExpanded)
-                    Tooltip(
-                      message: _isSidebarExpanded ? 'Collapse Sidebar' : 'Expand Sidebar',
-                      child: InkWell(
-                        onTap: _toggleSidebarExpanded,
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: AnimatedRotation(
-                            duration: const Duration(milliseconds: 280),
-                            turns: _isSidebarExpanded ? 0 : 0.5,
-                            child: const Icon(
-                              Icons.chevron_left_rounded,
-                              color: Color(0xFFA3A3A3),
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
 
-            // Navigation List
+            // Navigation List (Vertically centered between Header and Profile)
             Expanded(
-              child: ListView(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                children: [
-                  _buildSidebarButton(VortexNavTarget.search, Icons.search_rounded, 'Search', 0),
-                  _buildSidebarButton(VortexNavTarget.home, Icons.home_rounded, 'Home', 1),
-                  _buildSidebarButton(VortexNavTarget.movies, Icons.movie_outlined, 'Movies', 2),
-                  _buildSidebarButton(VortexNavTarget.liveTv, Icons.live_tv_rounded, 'Live TV', 3),
-                  _buildSidebarButton(VortexNavTarget.series, Icons.video_collection_outlined, 'Series', 4),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    child: Divider(color: Color(0xFF202020), height: 1),
-                  ),
-                  _buildSidebarButton(VortexNavTarget.addMore, Icons.add_circle_outline_rounded, 'Add More', 5),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    child: Divider(color: Color(0xFF202020), height: 1),
-                  ),
-                  _buildSidebarButton(VortexNavTarget.goToHome, Icons.logout_rounded, 'Go To Home', 6),
-                  _buildSidebarButton(VortexNavTarget.settings, Icons.settings_outlined, 'Settings', 7),
-                ],
+              child: Center(
+                child: ListView(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  children: [
+                    _buildSidebarButton(VortexNavTarget.search, Icons.search_rounded, 'Search', 0),
+                    _buildSidebarButton(VortexNavTarget.home, Icons.home_rounded, 'Home', 1),
+                    _buildSidebarButton(VortexNavTarget.movies, Icons.movie_outlined, 'Movies', 2),
+                    _buildSidebarButton(VortexNavTarget.liveTv, Icons.live_tv_rounded, 'Live TV', 3),
+                    _buildSidebarButton(VortexNavTarget.series, Icons.video_collection_outlined, 'Series', 4),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: Divider(color: Color(0xFF202020), height: 1),
+                    ),
+                    _buildSidebarButton(VortexNavTarget.addMore, Icons.add_circle_outline_rounded, 'Add More', 5),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: Divider(color: Color(0xFF202020), height: 1),
+                    ),
+                    _buildSidebarButton(VortexNavTarget.settings, Icons.settings_outlined, 'Settings', 6),
+                  ],
+                ),
               ),
             ),
 

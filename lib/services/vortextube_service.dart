@@ -112,8 +112,9 @@ class VortexTubeService {
         .toList();
 
     if (liveChannels.isNotEmpty) {
+      final recentChannels = List<Channel>.from(liveChannels);
       // Sort primarily by lastPlayed desc, then playCount desc
-      liveChannels.sort((a, b) {
+      recentChannels.sort((a, b) {
         if (a.lastPlayed != null && b.lastPlayed != null) {
           return b.lastPlayed!.compareTo(a.lastPlayed!);
         } else if (a.lastPlayed != null) {
@@ -128,8 +129,33 @@ class VortexTubeService {
         title: 'Recent TV Channels',
         subtitle: 'From your favorite live networks and categories',
         isCircular: true,
-        items: liveChannels,
+        items: recentChannels,
       ));
+
+      // Section 1b: Loved Channels (circular badges)
+      // Channels that are loved individually by user (isFavorite == true)
+      final lovedIndividualChannels = liveChannels
+          .where((c) => c.isFavorite)
+          .toList();
+
+      if (lovedIndividualChannels.isNotEmpty) {
+        // Sort by personalization score / playCount / name
+        lovedIndividualChannels.sort((a, b) {
+          final scoreB = scoreItem(channel: b, lovedCategories: lovedCategories, now: now);
+          final scoreA = scoreItem(channel: a, lovedCategories: lovedCategories, now: now);
+          if (scoreB != scoreA) {
+            return scoreB.compareTo(scoreA);
+          }
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+
+        shelves.add(VortexShelf(
+          title: 'Loved Channels',
+          subtitle: 'Channels you individually favorited (${lovedIndividualChannels.length} channels)',
+          isCircular: true,
+          items: lovedIndividualChannels,
+        ));
+      }
     }
 
     // Section 2: Loved Movie Categories - Listing out all movies from actual favorite categories
