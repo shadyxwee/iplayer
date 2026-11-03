@@ -25,6 +25,561 @@ enum VortexNavTarget {
   settings,
 }
 
+enum _AddMoreFocusArea {
+  closeButton,
+  search,
+  tabs,
+  listRow,
+  listHeart,
+}
+
+class _AddMoreVortexDialog extends StatefulWidget {
+  final Map<ContentType, List<String>> categoriesByType;
+  final Set<String> initialFavorites;
+  final ValueChanged<Set<String>> onFavoritesChanged;
+
+  const _AddMoreVortexDialog({
+    required this.categoriesByType,
+    required this.initialFavorites,
+    required this.onFavoritesChanged,
+  });
+
+  @override
+  State<_AddMoreVortexDialog> createState() => _AddMoreVortexDialogState();
+}
+
+class _AddMoreVortexDialogState extends State<_AddMoreVortexDialog> {
+  late Set<String> _currentFavorites;
+  int _activeTabIndex = 0; // 0: Live TV, 1: Movies / VOD, 2: Series
+  String _searchQuery = '';
+
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final FocusNode _dialogKeyFocusNode = FocusNode();
+  final ScrollController _listScrollController = ScrollController();
+
+  _AddMoreFocusArea _focusArea = _AddMoreFocusArea.search;
+  int _focusedRowIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentFavorites = Set<String>.from(widget.initialFavorites);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _dialogKeyFocusNode.dispose();
+    _listScrollController.dispose();
+    super.dispose();
+  }
+
+  List<String> _getFilteredCategories() {
+    ContentType type;
+    if (_activeTabIndex == 0) {
+      type = ContentType.live;
+    } else if (_activeTabIndex == 1) {
+      type = ContentType.movie;
+    } else {
+      type = ContentType.series;
+    }
+
+    final list = widget.categoriesByType[type] ?? [];
+    if (_searchQuery.isEmpty) return list;
+    return list.where((c) => c.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+  }
+
+  void _ensureVisible(int index) {
+    if (!_listScrollController.hasClients) return;
+    const itemHeight = 60.0;
+    final targetOffset = (index * itemHeight) - 100.0;
+    final clamped = targetOffset.clamp(0.0, _listScrollController.position.maxScrollExtent);
+    _listScrollController.animateTo(
+      clamped,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+    );
+  }
+
+  Future<void> _toggleFavorite(String category) async {
+    final isFav = await PreferencesService.toggleFavoriteCategory(category);
+    setState(() {
+      if (isFav) {
+        _currentFavorites.add(category);
+      } else {
+        _currentFavorites.remove(category);
+      }
+    });
+    widget.onFavoritesChanged(_currentFavorites);
+  }
+
+  void _handleDialogKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+    final key = event.logicalKey;
+
+    if (key == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final items = _getFilteredCategories();
+
+    // When search field has focus
+    if (_searchFocusNode.hasFocus) {
+      if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+        _searchFocusNode.unfocus();
+        _dialogKeyFocusNode.requestFocus();
+        setState(() {
+          if (items.isNotEmpty) {
+            _focusArea = _AddMoreFocusArea.listRow;
+            _focusedRowIndex = 0;
+          } else {
+            _focusArea = _AddMoreFocusArea.tabs;
+          }
+        });
+      } else if (key == LogicalKeyboardKey.arrowUp) {
+        _searchFocusNode.unfocus();
+        _dialogKeyFocusNode.requestFocus();
+        setState(() {
+          _focusArea = _AddMoreFocusArea.closeButton;
+        });
+      }
+      return;
+    }
+
+    // Modal navigation using D-pad / Arrow keys
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
+        if (_focusedRowIndex > 0) {
+          setState(() {
+            _focusedRowIndex--;
+          });
+          _ensureVisible(_focusedRowIndex);
+        } else {
+          setState(() {
+            _focusArea = _AddMoreFocusArea.tabs;
+          });
+        }
+      } else if (_focusArea == _AddMoreFocusArea.tabs) {
+        _dialogKeyFocusNode.unfocus();
+        _searchFocusNode.requestFocus();
+        setState(() {
+          _focusArea = _AddMoreFocusArea.search;
+        });
+      } else if (_focusArea == _AddMoreFocusArea.search) {
+        setState(() {
+          _focusArea = _AddMoreFocusArea.closeButton;
+        });
+      }
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      if (_focusArea == _AddMoreFocusArea.closeButton) {
+        _searchFocusNode.requestFocus();
+        setState(() {
+          _focusArea = _AddMoreFocusArea.search;
+        });
+      } else if (_focusArea == _AddMoreFocusArea.search) {
+        _searchFocusNode.unfocus();
+        _dialogKeyFocusNode.requestFocus();
+        setState(() {
+          _focusArea = _AddMoreFocusArea.tabs;
+        });
+      } else if (_focusArea == _AddMoreFocusArea.tabs) {
+        if (items.isNotEmpty) {
+          setState(() {
+            _focusArea = _AddMoreFocusArea.listRow;
+            _focusedRowIndex = 0;
+          });
+          _ensureVisible(0);
+        }
+      } else if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
+        if (_focusedRowIndex < items.length - 1) {
+          setState(() {
+            _focusedRowIndex++;
+          });
+          _ensureVisible(_focusedRowIndex);
+        }
+      }
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      if (_focusArea == _AddMoreFocusArea.tabs) {
+        if (_activeTabIndex > 0) {
+          setState(() {
+            _activeTabIndex--;
+            _focusedRowIndex = 0;
+          });
+        }
+      } else if (_focusArea == _AddMoreFocusArea.listHeart) {
+        setState(() {
+          _focusArea = _AddMoreFocusArea.listRow;
+        });
+      }
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      if (_focusArea == _AddMoreFocusArea.tabs) {
+        if (_activeTabIndex < 2) {
+          setState(() {
+            _activeTabIndex++;
+            _focusedRowIndex = 0;
+          });
+        }
+      } else if (_focusArea == _AddMoreFocusArea.listRow) {
+        setState(() {
+          _focusArea = _AddMoreFocusArea.listHeart;
+        });
+      }
+    } else if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
+      if (_focusArea == _AddMoreFocusArea.closeButton) {
+        Navigator.pop(context);
+      } else if (_focusArea == _AddMoreFocusArea.search) {
+        _searchFocusNode.requestFocus();
+      } else if (_focusArea == _AddMoreFocusArea.tabs) {
+        if (items.isNotEmpty) {
+          setState(() {
+            _focusArea = _AddMoreFocusArea.listRow;
+            _focusedRowIndex = 0;
+          });
+        }
+      } else if (_focusArea == _AddMoreFocusArea.listRow || _focusArea == _AddMoreFocusArea.listHeart) {
+        if (_focusedRowIndex >= 0 && _focusedRowIndex < items.length) {
+          _toggleFavorite(items[_focusedRowIndex]);
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredCategories = _getFilteredCategories();
+    final selectedCount = _currentFavorites.length;
+
+    return KeyboardListener(
+      focusNode: _dialogKeyFocusNode,
+      autofocus: true,
+      onKeyEvent: _handleDialogKeyEvent,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Center(
+          child: Container(
+            width: 560,
+            constraints: const BoxConstraints(maxHeight: 700),
+            decoration: BoxDecoration(
+              color: const Color(0xFF171719),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFF2B2B30), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.9),
+                  blurRadius: 36,
+                  spreadRadius: 8,
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(26, 24, 26, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Modal Header
+                Row(
+                  children: [
+                    // Plus Badge
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF27272A).withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3F3F46).withValues(alpha: 0.6)),
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.add_rounded, color: Color(0xFFE4E4E7), size: 20),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Add to VortexTube',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Selected Pill Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF22D3EE).withValues(alpha: 0.5)),
+                      ),
+                      child: Text(
+                        '$selectedCount Selected',
+                        style: const TextStyle(
+                          color: Color(0xFF22D3EE),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Close Button
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: _focusArea == _AddMoreFocusArea.closeButton
+                              ? const Color(0xFF27272A)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: _focusArea == _AddMoreFocusArea.closeButton
+                              ? Border.all(color: Colors.white, width: 2)
+                              : null,
+                        ),
+                        child: const Icon(Icons.close_rounded, color: Color(0xFFA1A1AA), size: 20),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Favorite categories from your playlist to automatically populate your personalized shelves.',
+                  style: TextStyle(color: Color(0xFF8E8E97), fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+
+                // Search Bar Input Field
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E22),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _searchFocusNode.hasFocus
+                          ? Colors.white
+                          : (_focusArea == _AddMoreFocusArea.search
+                              ? Colors.white70
+                              : const Color(0xFF2B2B30)),
+                      width: _searchFocusNode.hasFocus ? 2 : 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search_rounded, color: Color(0xFF757580), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                          decoration: const InputDecoration(
+                            hintText: 'Search categories...',
+                            hintStyle: TextStyle(color: Color(0xFF787882), fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          onChanged: (val) {
+                            setState(() {
+                              _searchQuery = val.trim();
+                              _focusedRowIndex = 0;
+                            });
+                          },
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                              _focusedRowIndex = 0;
+                            });
+                          },
+                          child: const Icon(Icons.clear, color: Color(0xFF787882), size: 16),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Tab Navigation Bar: Live TV | Movies / VOD | Series
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121214),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF27272A)),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTabButton(0, 'Live TV'),
+                      _buildTabButton(1, 'Movies / VOD'),
+                      _buildTabButton(2, 'Series'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Category Items List
+                Expanded(
+                  child: filteredCategories.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Text(
+                              _searchQuery.isEmpty ? 'No categories available' : 'No categories found matching "$_searchQuery"',
+                              style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _listScrollController,
+                          itemCount: filteredCategories.length,
+                          itemBuilder: (context, index) {
+                            final cat = filteredCategories[index];
+                            final isFav = _currentFavorites.contains(cat);
+                            final isRowFocused = (_focusArea == _AddMoreFocusArea.listRow) && (_focusedRowIndex == index);
+                            final isHeartFocused = (_focusArea == _AddMoreFocusArea.listHeart) && (_focusedRowIndex == index);
+
+                            return Container(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: InkWell(
+                                onTap: () => _toggleFavorite(cat),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: isRowFocused
+                                        ? const Color(0xFF27272C)
+                                        : (isFav ? const Color(0xFF1E1E21) : const Color(0xFF1E1E21)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isRowFocused
+                                          ? (isFav ? const Color(0xFFE50914) : Colors.white)
+                                          : (isFav ? const Color(0xFFE50914).withValues(alpha: 0.4) : const Color(0xFF26262A)),
+                                      width: isRowFocused ? 2 : 1,
+                                    ),
+                                    boxShadow: isRowFocused
+                                        ? [
+                                            BoxShadow(
+                                              color: (isFav ? const Color(0xFFE50914) : Colors.white).withValues(alpha: 0.2),
+                                              blurRadius: 10,
+                                            ),
+                                          ]
+                                        : [],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          cat,
+                                          style: TextStyle(
+                                            color: isFav ? Colors.white : const Color(0xFFD4D4D8),
+                                            fontWeight: isFav || isRowFocused ? FontWeight.w600 : FontWeight.w500,
+                                            fontSize: 14,
+                                            letterSpacing: 0.2,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Heart Toggle Button
+                                      GestureDetector(
+                                        onTap: () => _toggleFavorite(cat),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: isHeartFocused ? const Color(0xFF333338) : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: isHeartFocused
+                                                ? Border.all(
+                                                    color: isFav ? const Color(0xFFE50914) : Colors.white,
+                                                    width: 2,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: Icon(
+                                            isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                            color: isFav ? const Color(0xFFE50914) : const Color(0xFF71717A),
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabButton(int index, String title) {
+    final isActive = _activeTabIndex == index;
+    final isFocused = _focusArea == _AddMoreFocusArea.tabs && _activeTabIndex == index;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _activeTabIndex = index;
+            _focusArea = _AddMoreFocusArea.tabs;
+            _focusedRowIndex = 0;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF252529) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isFocused ? Colors.white : (isActive ? Colors.white70 : Colors.transparent),
+              width: isFocused ? 2 : 1,
+            ),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 4,
+                    ),
+                  ]
+                : [],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            title,
+            style: TextStyle(
+              color: isActive ? Colors.white : const Color(0xFFA1A1AA),
+              fontSize: 13,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 enum VortexZone { sidebar, searchBar, filterBar, content }
 
 enum VortexFilterType { all, recent, topRated, inProgress, category }
@@ -158,7 +713,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   Future<void> _loadActiveViewContent() async {
     if (_activeNav == VortexNavTarget.home) {
-      final shelves = await VortexTubeService.getPersonalizedFeed();
+      final shelves = await VortexTubeService.getPersonalizedFeed(searchQuery: _searchQuery);
       if (mounted) {
         setState(() {
           _shelves = shelves;
@@ -254,153 +809,41 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   void _showAddMorePopup() async {
     final allChannels = await DatabaseService.getAllChannels();
-    final categoriesByType = <ContentType, Set<String>>{
-      ContentType.live: {},
-      ContentType.movie: {},
-      ContentType.series: {},
+    final categoriesByType = <ContentType, List<String>>{
+      ContentType.live: [],
+      ContentType.movie: [],
+      ContentType.series: [],
     };
+
+    final liveSet = <String>{};
+    final movieSet = <String>{};
+    final seriesSet = <String>{};
 
     for (final c in allChannels) {
       if (c.group != null && c.group!.isNotEmpty) {
-        categoriesByType[c.contentType]?.add(c.group!);
+        if (c.contentType == ContentType.live) liveSet.add(c.group!);
+        if (c.contentType == ContentType.movie) movieSet.add(c.group!);
+        if (c.contentType == ContentType.series) seriesSet.add(c.group!);
       }
     }
 
-    if (!mounted) return;
+    categoriesByType[ContentType.live] = liveSet.toList()..sort();
+    categoriesByType[ContentType.movie] = movieSet.toList()..sort();
+    categoriesByType[ContentType.series] = seriesSet.toList()..sort();
 
-    String popupSearchQuery = '';
+    if (!mounted) return;
 
     await showDialog(
       context: context,
+      barrierDismissible: true,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            return Dialog(
-              backgroundColor: const Color(0xFF161616),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: Color(0xFF282828)),
-              ),
-              child: Container(
-                width: 600,
-                height: 560,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF0000).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.add_rounded, color: Color(0xFFFF0000)),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Add to VortexTube',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Favorite categories from your playlist to automatically populate your personalized shelves.',
-                      style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    // Search input for categories
-                    Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF222222),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF333333)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.search_rounded, color: Color(0xFF888888), size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
-                              decoration: const InputDecoration(
-                                hintText: 'Search categories...',
-                                hintStyle: TextStyle(color: Color(0xFF717171), fontSize: 13),
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                              onChanged: (val) {
-                                setDialogState(() {
-                                  popupSearchQuery = val.trim().toLowerCase();
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Divider(color: Color(0xFF282828), height: 1),
-                    Expanded(
-                      child: DefaultTabController(
-                        length: 3,
-                        child: Column(
-                          children: [
-                            const TabBar(
-                              indicatorColor: Color(0xFFFF0000),
-                              labelColor: Colors.white,
-                              unselectedLabelColor: Color(0xFF888888),
-                              tabs: [
-                                Tab(text: 'Live TV'),
-                                Tab(text: 'Movies / VOD'),
-                                Tab(text: 'Series'),
-                              ],
-                            ),
-                            Expanded(
-                              child: TabBarView(
-                                children: [
-                                  _buildCategoryPickerList(
-                                    categoriesByType[ContentType.live]!
-                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
-                                        .toList()
-                                      ..sort(),
-                                    setDialogState,
-                                  ),
-                                  _buildCategoryPickerList(
-                                    categoriesByType[ContentType.movie]!
-                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
-                                        .toList()
-                                      ..sort(),
-                                    setDialogState,
-                                  ),
-                                  _buildCategoryPickerList(
-                                    categoriesByType[ContentType.series]!
-                                        .where((c) => popupSearchQuery.isEmpty || c.toLowerCase().contains(popupSearchQuery))
-                                        .toList()
-                                      ..sort(),
-                                    setDialogState,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
+        return _AddMoreVortexDialog(
+          categoriesByType: categoriesByType,
+          initialFavorites: _favoriteCategories,
+          onFavoritesChanged: (updated) {
+            setState(() {
+              _favoriteCategories = updated;
+            });
           },
         );
       },
@@ -717,95 +1160,6 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     _loadInitialData();
   }
 
-  Widget _buildCategoryPickerList(List<String> categories, StateSetter setDialogState) {
-    if (categories.isEmpty) {
-      return const Center(
-        child: Text('No categories available in playlist', style: TextStyle(color: Color(0xFF888888))),
-      );
-    }
-
-    return FocusTraversalGroup(
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: categories.length,
-        itemBuilder: (context, index) {
-          final cat = categories[index];
-          final isFav = _favoriteCategories.contains(cat);
-
-          return FocusableActionDetector(
-            actions: {
-              ActivateIntent: CallbackAction<ActivateIntent>(
-                onInvoke: (_) async {
-                  final isNowFav = await PreferencesService.toggleFavoriteCategory(cat);
-                  setDialogState(() {
-                    if (isNowFav) {
-                      _favoriteCategories.add(cat);
-                    } else {
-                      _favoriteCategories.remove(cat);
-                    }
-                  });
-                  setState(() {});
-                  return null;
-                },
-              ),
-            },
-            child: Builder(
-              builder: (context) {
-                final hasFocus = Focus.of(context).hasFocus;
-                return InkWell(
-                  onTap: () async {
-                    final isNowFav = await PreferencesService.toggleFavoriteCategory(cat);
-                    setDialogState(() {
-                      if (isNowFav) {
-                        _favoriteCategories.add(cat);
-                      } else {
-                        _favoriteCategories.remove(cat);
-                      }
-                    });
-                    setState(() {});
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 3),
-                    decoration: BoxDecoration(
-                      color: hasFocus
-                          ? const Color(0xFF333333)
-                          : isFav
-                              ? const Color(0xFFFF0000).withValues(alpha: 0.12)
-                              : const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: hasFocus
-                            ? Colors.white
-                            : isFav
-                                ? const Color(0xFFFF0000).withValues(alpha: 0.5)
-                                : const Color(0xFF282828),
-                        width: hasFocus ? 2 : 1,
-                      ),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      title: Text(
-                        cat,
-                        style: TextStyle(
-                          color: hasFocus || isFav ? Colors.white : const Color(0xFFCCCCCC),
-                          fontWeight: hasFocus || isFav ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      trailing: Icon(
-                        isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        color: isFav ? const Color(0xFFFF0000) : const Color(0xFF666666),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
@@ -823,7 +1177,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     }
 
     if (_searchFocusNode.hasFocus) {
-      if (key == LogicalKeyboardKey.arrowDown) {
+      if (key == LogicalKeyboardKey.arrowDown ||
+          key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter ||
+          key == LogicalKeyboardKey.select) {
         _searchFocusNode.unfocus();
         _screenFocusNode.requestFocus();
         setState(() => _currentZone = VortexZone.content);
@@ -1010,7 +1367,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         _selectNavTarget(nav);
         break;
       case VortexZone.searchBar:
-        _searchFocusNode.requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _searchFocusNode.requestFocus();
+        });
         break;
       case VortexZone.filterBar:
         _applyFocusedFilter();
@@ -1086,7 +1445,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       setState(() {
         _currentZone = VortexZone.searchBar;
       });
-      _searchFocusNode.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
       return;
     }
 
@@ -1410,6 +1771,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                    textInputAction: TextInputAction.search,
                     decoration: const InputDecoration(
                       hintText: 'Search VortexTube...',
                       hintStyle: TextStyle(color: Color(0xFF888888), fontSize: 13),
@@ -1418,6 +1780,15 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     ),
                     onChanged: (val) {
                       setState(() => _searchQuery = val);
+                      _loadActiveViewContent();
+                    },
+                    onSubmitted: (val) {
+                      _searchFocusNode.unfocus();
+                      _screenFocusNode.requestFocus();
+                      setState(() {
+                        _searchQuery = val;
+                        _currentZone = VortexZone.content;
+                      });
                       _loadActiveViewContent();
                     },
                   ),

@@ -77,18 +77,26 @@ class VortexTubeService {
 
   /// Builds the complete personalized feed for VortexTube.
   /// Returns empty list if user has zero loved categories and zero loved items.
-  static Future<List<VortexShelf>> getPersonalizedFeed() async {
+  static Future<List<VortexShelf>> getPersonalizedFeed({String searchQuery = ''}) async {
     final lovedCategoriesList = await PreferencesService.getFavoriteCategories();
     final lovedCategories = lovedCategoriesList.toSet();
 
     final allChannels = await DatabaseService.getAllChannels();
 
     // Filter strictly to eligible content: loved category OR loved item
-    final eligibleItems = allChannels.where((c) {
+    var eligibleItems = allChannels.where((c) {
       final isItemLoved = c.isFavorite;
       final isCatLoved = c.group != null && lovedCategories.contains(c.group!);
       return isItemLoved || isCatLoved;
     }).toList();
+
+    if (searchQuery.trim().isNotEmpty) {
+      final query = searchQuery.trim().toLowerCase();
+      eligibleItems = eligibleItems
+          .where((c) => c.name.toLowerCase().contains(query) ||
+              (c.group != null && c.group!.toLowerCase().contains(query)))
+          .toList();
+    }
 
     if (eligibleItems.isEmpty) {
       return [];
@@ -97,7 +105,7 @@ class VortexTubeService {
     final shelves = <VortexShelf>[];
     final now = DateTime.now();
 
-    // Shelf 1: Recent TV Channels (circular badges)
+    // Section 1: Recent TV Channels (circular badges)
     // Eligible: Live channels that are loved or in loved live categories
     final liveChannels = eligibleItems
         .where((c) => c.contentType == ContentType.live)
@@ -120,75 +128,58 @@ class VortexTubeService {
         title: 'Recent TV Channels',
         subtitle: 'From your favorite live networks and categories',
         isCircular: true,
-        items: liveChannels.take(12).toList(),
+        items: liveChannels,
       ));
     }
 
-    // Non-live eligible items (strictly Movies/VOD and Series for video card shelves)
-    final nonLiveItems = eligibleItems
-        .where((c) => c.contentType != ContentType.live)
+    // Section 2: Loved Movie Categories - Listing out all movies from actual favorite categories
+    final movieItems = eligibleItems
+        .where((c) => c.contentType == ContentType.movie)
         .toList();
 
-    // Shelf 2: Continue Watching (loved movies/series with progress)
-    final inProgressItems = nonLiveItems.where((c) {
-      return c.watchedMilliseconds > 0 &&
-          (c.totalMilliseconds == 0 || c.watchedMilliseconds < c.totalMilliseconds);
-    }).toList();
+    final movieCatNames = <String>{};
+    for (final c in movieItems) {
+      if (c.group != null && lovedCategories.contains(c.group!)) {
+        movieCatNames.add(c.group!);
+      }
+    }
 
-    if (inProgressItems.isNotEmpty) {
-      inProgressItems.sort((a, b) {
-        if (a.lastPlayed != null && b.lastPlayed != null) {
-          return b.lastPlayed!.compareTo(a.lastPlayed!);
-        }
-        return b.watchedMilliseconds.compareTo(a.watchedMilliseconds);
-      });
+    final sortedMovieCats = movieCatNames.toList()..sort();
+    for (final cat in sortedMovieCats) {
+      final items = movieItems.where((c) => c.group == cat).toList();
+      items.sort((a, b) => scoreItem(channel: b, lovedCategories: lovedCategories, now: now)
+          .compareTo(scoreItem(channel: a, lovedCategories: lovedCategories, now: now)));
 
       shelves.add(VortexShelf(
-        title: 'Continue Watching',
-        subtitle: 'Pick up where you left off',
-        items: inProgressItems.take(12).toList(),
+        title: cat,
+        subtitle: 'Movies (${items.length} titles)',
+        items: items,
       ));
     }
 
-    // Shelf 3: Recommended for You (highest scored movies/series only)
-    if (nonLiveItems.isNotEmpty) {
-      final scoredItems = nonLiveItems.map((item) {
-        return MapEntry(item, scoreItem(channel: item, lovedCategories: lovedCategories, now: now));
-      }).toList();
+    // Section 3: Loved Series Categories - Listing out all series from actual favorite categories
+    final seriesItems = eligibleItems
+        .where((c) => c.contentType == ContentType.series)
+        .toList();
 
-      scoredItems.sort((a, b) => b.value.compareTo(a.value));
-
-      final topRecommended = scoredItems.map((e) => e.key).take(12).toList();
-      if (topRecommended.isNotEmpty) {
-        shelves.add(VortexShelf(
-          title: 'Recommended for You',
-          subtitle: 'Curated by VortexTube ranking based on your loved preferences',
-          items: topRecommended,
-        ));
+    final seriesCatNames = <String>{};
+    for (final c in seriesItems) {
+      if (c.group != null && lovedCategories.contains(c.group!)) {
+        seriesCatNames.add(c.group!);
       }
     }
 
-    // Shelves 4+: Dedicated sections for the user's Actual Loved Categories
-    // Group loved categories into Movies and Series categories and list out all their contents
-    for (final lovedCat in lovedCategories) {
-      final catItems = nonLiveItems
-          .where((c) => c.group == lovedCat)
-          .toList();
+    final sortedSeriesCats = seriesCatNames.toList()..sort();
+    for (final cat in sortedSeriesCats) {
+      final items = seriesItems.where((c) => c.group == cat).toList();
+      items.sort((a, b) => scoreItem(channel: b, lovedCategories: lovedCategories, now: now)
+          .compareTo(scoreItem(channel: a, lovedCategories: lovedCategories, now: now)));
 
-      if (catItems.isNotEmpty) {
-        // Sort items in this loved category by score
-        catItems.sort((a, b) => scoreItem(channel: b, lovedCategories: lovedCategories, now: now)
-            .compareTo(scoreItem(channel: a, lovedCategories: lovedCategories, now: now)));
-
-        final isSeriesCategory = catItems.any((c) => c.contentType == ContentType.series);
-        final typeLabel = isSeriesCategory ? 'Series' : 'Movies';
-
-        shelves.add(VortexShelf(
-          title: '$lovedCat ($typeLabel)',
-          subtitle: 'All loved titles from $lovedCat',
-          items: catItems,
-        ));
-      }
+      shelves.add(VortexShelf(
+        title: cat,
+        subtitle: 'Series (${items.length} titles)',
+        items: items,
+      ));
     }
 
     return shelves;
