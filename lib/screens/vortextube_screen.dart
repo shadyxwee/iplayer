@@ -662,6 +662,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   int _focusedShelfIndex = 0;
   int _focusedItemIndex = 0;
   int _focusedGridIndex = 0;
+  int _lastFocusedGridIndex = 0;
+  final Map<int, GlobalKey> _cardKeys = {};
 
   final List<Map<String, dynamic>> _navItems = [
     {'target': VortexNavTarget.search, 'icon': Icons.search_rounded, 'label': 'Search'},
@@ -737,20 +739,24 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       final allChannels = await DatabaseService.getAllChannels();
       final lovedCategories = _favoriteCategories;
 
+      // Filter strictly by content type first
+      List<Channel> typeChannels;
+      if (_activeNav == VortexNavTarget.liveTv) {
+        typeChannels = allChannels.where((c) => c.contentType == ContentType.live).toList();
+      } else if (_activeNav == VortexNavTarget.movies) {
+        typeChannels = allChannels.where((c) => c.contentType == ContentType.movie).toList();
+      } else if (_activeNav == VortexNavTarget.series) {
+        typeChannels = allChannels.where((c) => c.contentType == ContentType.series).toList();
+      } else {
+        typeChannels = allChannels;
+      }
+
       // Filter strictly to user's loved categories or loved items
-      var filtered = allChannels.where((c) {
+      var filtered = typeChannels.where((c) {
         final isItemLoved = c.isFavorite;
         final isCatLoved = c.group != null && lovedCategories.contains(c.group!);
         return isItemLoved || isCatLoved;
       }).toList();
-
-      if (_activeNav == VortexNavTarget.liveTv) {
-        filtered = filtered.where((c) => c.contentType == ContentType.live).toList();
-      } else if (_activeNav == VortexNavTarget.movies) {
-        filtered = filtered.where((c) => c.contentType == ContentType.movie).toList();
-      } else if (_activeNav == VortexNavTarget.series) {
-        filtered = filtered.where((c) => c.contentType == ContentType.series).toList();
-      }
 
       if (_searchQuery.trim().isNotEmpty) {
         filtered = filtered
@@ -765,11 +771,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       _scopedItems = filtered;
       _applyFilter();
 
+      _cardKeys.clear();
+
       if (mounted) {
         setState(() {
-          _displayedCount = _pageSize;
+          _displayedCount = _filteredScopedItems.length; // Load all filtered items so no items or rows are hidden
           _isLoading = false;
           _focusedGridIndex = 0;
+          _lastFocusedGridIndex = 0;
         });
       }
     }
@@ -835,6 +844,30 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       }
     }
 
+    // In sectioned view ("All" filter), order items strictly by category sections
+    // so globalIdx matches _filteredScopedItems[globalIdx] for D-pad Enter/Select
+    if (_activeFilter.type == VortexFilterType.all) {
+      final List<Channel> ordered = [];
+      final Set<String> processedCats = {};
+
+      for (final favCat in _favoriteCategories) {
+        final catItems = items.where((c) => c.group == favCat).toList();
+        if (catItems.isNotEmpty) {
+          ordered.addAll(catItems);
+          processedCats.add(favCat);
+        }
+      }
+      for (final item in items) {
+        final cat = item.group ?? (_activeNav == VortexNavTarget.liveTv ? 'Other Channels' : (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series'));
+        if (!processedCats.contains(cat)) {
+          final catItems = items.where((c) => (c.group ?? (_activeNav == VortexNavTarget.liveTv ? 'Other Channels' : (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series'))) == cat).toList();
+          ordered.addAll(catItems);
+          processedCats.add(cat);
+        }
+      }
+      items = ordered;
+    }
+
     _filteredScopedItems = items;
   }
 
@@ -849,11 +882,18 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   List<String> _getAvailableCategoryFilters() {
     final set = <String>{'All'};
     for (final item in _scopedItems) {
-      if (item.group != null && item.group!.isNotEmpty) {
+      if (item.group != null && item.group!.isNotEmpty && _favoriteCategories.contains(item.group!)) {
         set.add(item.group!);
       }
     }
-    return set.toList();
+    // Also include any loved category even if empty so users see all loved tabs
+    for (final cat in _favoriteCategories) {
+      if (_scopedItems.any((c) => c.group == cat)) {
+        set.add(cat);
+      }
+    }
+    final sorted = set.where((c) => c != 'All').toList()..sort();
+    return ['All', ...sorted];
   }
 
   void _showAddMorePopup() async {
@@ -1260,6 +1300,38 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     return 6; // 6 items in one row for Movies & Series posters
   }
 
+  /// Build list of section counts for sectioned grid navigation
+  List<int> _getSectionCounts() {
+    final Map<String, int> counts = {};
+    for (final item in _filteredScopedItems) {
+      final cat = item.group ?? (_activeNav == VortexNavTarget.liveTv ? 'Other Channels' : (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series'));
+      counts[cat] = (counts[cat] ?? 0) + 1;
+    }
+    return counts.values.toList();
+  }
+
+  /// Map global item index to section index and local index inside section
+  (int sectionIndex, int localIndex) _mapGlobalToSection(int globalIdx, List<int> sectionCounts) {
+    int running = 0;
+    for (int s = 0; s < sectionCounts.length; s++) {
+      final count = sectionCounts[s];
+      if (globalIdx < running + count) {
+        return (s, globalIdx - running);
+      }
+      running += count;
+    }
+    return (0, 0);
+  }
+
+  /// Map section index and local index inside section to global item index
+  int _mapSectionToGlobal(int sectionIdx, int localIdx, List<int> sectionCounts) {
+    int running = 0;
+    for (int s = 0; s < sectionIdx && s < sectionCounts.length; s++) {
+      running += sectionCounts[s];
+    }
+    return running + localIdx;
+  }
+
   void _moveUp() {
     setState(() {
       switch (_currentZone) {
@@ -1286,11 +1358,33 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             }
           } else {
             final cols = _getColumnCount();
-            if (_focusedGridIndex >= cols) {
-              _focusedGridIndex -= cols;
+            final sectionCounts = _getSectionCounts();
+            if (sectionCounts.isEmpty) return;
+
+            final (secIdx, localIdx) = _mapGlobalToSection(_focusedGridIndex, sectionCounts);
+            final row = localIdx ~/ cols;
+            final col = localIdx % cols;
+
+            if (row > 0) {
+              // Move to the row above in the same section
+              final targetLocal = (row - 1) * cols + col;
+              _focusedGridIndex = _mapSectionToGlobal(secIdx, targetLocal, sectionCounts);
+              _lastFocusedGridIndex = _focusedGridIndex;
               _ensureVisibleGridItem(_focusedGridIndex);
             } else {
-              _currentZone = VortexZone.filterBar;
+              // On the first row of this section
+              if (secIdx > 0) {
+                // Move to the last row of the previous section
+                final prevSecCount = sectionCounts[secIdx - 1];
+                final prevLastRow = (prevSecCount - 1) ~/ cols;
+                final targetLocal = ((prevLastRow * cols) + col).clamp(0, prevSecCount - 1);
+                _focusedGridIndex = _mapSectionToGlobal(secIdx - 1, targetLocal, sectionCounts);
+                _lastFocusedGridIndex = _focusedGridIndex;
+                _ensureVisibleGridItem(_focusedGridIndex);
+              } else {
+                // Very first row of the entire page -> move up to filter bar
+                _currentZone = VortexZone.filterBar;
+              }
             }
           }
           break;
@@ -1313,7 +1407,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           _currentZone = VortexZone.content;
           _focusedShelfIndex = 0;
           _focusedItemIndex = 0;
-          _focusedGridIndex = 0;
+          _focusedGridIndex = _lastFocusedGridIndex.clamp(0, (_filteredScopedItems.length - 1).clamp(0, 999999));
+          _ensureVisibleGridItem(_focusedGridIndex);
           break;
         case VortexZone.content:
           if (_activeNav == VortexNavTarget.home) {
@@ -1324,9 +1419,33 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             }
           } else {
             final cols = _getColumnCount();
-            if (_focusedGridIndex + cols < _filteredScopedItems.length) {
-              _focusedGridIndex += cols;
+            final sectionCounts = _getSectionCounts();
+            if (sectionCounts.isEmpty) return;
+
+            final (secIdx, localIdx) = _mapGlobalToSection(_focusedGridIndex, sectionCounts);
+            final currentSecCount = sectionCounts[secIdx];
+            final row = localIdx ~/ cols;
+            final col = localIdx % cols;
+            final lastRowInSec = (currentSecCount - 1) ~/ cols;
+
+            if (row < lastRowInSec) {
+              // Move to row below in the same section
+              final targetLocal = ((row + 1) * cols + col).clamp(0, currentSecCount - 1);
+              _focusedGridIndex = _mapSectionToGlobal(secIdx, targetLocal, sectionCounts);
+              _lastFocusedGridIndex = _focusedGridIndex;
               _ensureVisibleGridItem(_focusedGridIndex);
+            } else {
+              // On the last row of this section
+              if (secIdx < sectionCounts.length - 1) {
+                // Move to the first row of next section (same col or clamped)
+                final nextSecCount = sectionCounts[secIdx + 1];
+                final targetLocal = col.clamp(0, nextSecCount - 1);
+                _focusedGridIndex = _mapSectionToGlobal(secIdx + 1, targetLocal, sectionCounts);
+                _lastFocusedGridIndex = _focusedGridIndex;
+                _ensureVisibleGridItem(_focusedGridIndex);
+              } else {
+                // Very last row of the entire content: DO NOTHING (stay on current card)
+              }
             }
           }
           break;
@@ -1360,10 +1479,19 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             }
           } else {
             final cols = _getColumnCount();
-            if (_focusedGridIndex % cols != 0) {
+            final sectionCounts = _getSectionCounts();
+            if (sectionCounts.isEmpty) return;
+
+            final (secIdx, localIdx) = _mapGlobalToSection(_focusedGridIndex, sectionCounts);
+            final col = localIdx % cols;
+
+            if (col > 0) {
+              // Move to previous card in the same row
               _focusedGridIndex--;
+              _lastFocusedGridIndex = _focusedGridIndex;
               _ensureVisibleGridItem(_focusedGridIndex);
             } else {
+              // On the first card of any row -> move focus into the sidebar
               _currentZone = VortexZone.sidebar;
             }
           }
@@ -1377,6 +1505,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       switch (_currentZone) {
         case VortexZone.sidebar:
           _currentZone = VortexZone.content;
+          _focusedGridIndex = _lastFocusedGridIndex.clamp(0, (_filteredScopedItems.length - 1).clamp(0, 999999));
+          _ensureVisibleGridItem(_focusedGridIndex);
           break;
         case VortexZone.searchBar:
           _currentZone = VortexZone.filterBar;
@@ -1401,9 +1531,20 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             }
           } else {
             final cols = _getColumnCount();
-            if (_focusedGridIndex < _filteredScopedItems.length - 1 && (_focusedGridIndex + 1) % cols != 0) {
+            final sectionCounts = _getSectionCounts();
+            if (sectionCounts.isEmpty) return;
+
+            final (secIdx, localIdx) = _mapGlobalToSection(_focusedGridIndex, sectionCounts);
+            final currentSecCount = sectionCounts[secIdx];
+            final col = localIdx % cols;
+
+            // Move to next card in the same row ONLY if not at the end of the row and not at the end of section
+            if (col < cols - 1 && localIdx < currentSecCount - 1) {
               _focusedGridIndex++;
+              _lastFocusedGridIndex = _focusedGridIndex;
               _ensureVisibleGridItem(_focusedGridIndex);
+            } else {
+              // At the end of the row or last card of the section -> STAY THERE, DO NOTHING
             }
           }
           break;
@@ -1591,12 +1732,41 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   void _ensureVisibleGridItem(int gridIndex) {
+    final key = _cardKeys[gridIndex];
+    if (key != null && key.currentContext != null) {
+      Scrollable.ensureVisible(
+        key.currentContext!,
+        alignment: 0.5, // Perfect vertical centering
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+      return;
+    }
+
     if (!_mainScrollController.hasClients) return;
+    final sectionCounts = _getSectionCounts();
+    if (sectionCounts.isEmpty) return;
+
     final cols = _getColumnCount();
-    final row = gridIndex ~/ cols;
-    final double rowHeight = _activeNav == VortexNavTarget.liveTv ? 130.0 : 250.0;
+    final (secIdx, localIdx) = _mapGlobalToSection(gridIndex, sectionCounts);
+
+    // Calculate total rows preceding this item across all sections
+    double estimatedOffset = 0.0;
+    const double headerHeight = 70.0;
+    final double rowHeight = _activeNav == VortexNavTarget.liveTv ? 120.0 : 280.0;
+
+    for (int s = 0; s < secIdx; s++) {
+      estimatedOffset += headerHeight;
+      final secRows = ((sectionCounts[s] - 1) ~/ cols) + 1;
+      estimatedOffset += secRows * rowHeight;
+    }
+
+    estimatedOffset += headerHeight;
+    final currentRowInSec = localIdx ~/ cols;
+    estimatedOffset += (currentRowInSec * rowHeight);
+
     final double viewportHeight = _mainScrollController.position.viewportDimension;
-    final double targetOffset = (row * rowHeight) - (viewportHeight / 2) + (rowHeight / 2);
+    final double targetOffset = estimatedOffset - (viewportHeight / 2) + (rowHeight / 2);
     final double clampedOffset = targetOffset.clamp(0.0, _mainScrollController.position.maxScrollExtent);
 
     _mainScrollController.animateTo(
@@ -2341,15 +2511,33 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildScopedGridView() {
-    final displayedItems = _filteredScopedItems.take(_displayedCount).toList();
+    final displayedItems = _filteredScopedItems;
     final isLive = _activeNav == VortexNavTarget.liveTv;
 
     if (isLive) {
       // Group channels by category for sectioned view matching UI spec
       final Map<String, List<Channel>> grouped = {};
-      for (final channel in displayedItems) {
-        final cat = channel.group ?? 'Other Channels';
-        grouped.putIfAbsent(cat, () => []).add(channel);
+
+      if (_activeFilter.type == VortexFilterType.all) {
+        // Ensure every loved category is represented even if some have fewer/more channels
+        for (final favCat in _favoriteCategories) {
+          final catChannels = displayedItems.where((c) => c.group == favCat).toList();
+          if (catChannels.isNotEmpty) {
+            grouped[favCat] = catChannels;
+          }
+        }
+        // Then add any other channels if present
+        for (final channel in displayedItems) {
+          final cat = channel.group ?? 'Other Channels';
+          if (!grouped.containsKey(cat)) {
+            grouped.putIfAbsent(cat, () => []).add(channel);
+          }
+        }
+      } else {
+        for (final channel in displayedItems) {
+          final cat = channel.group ?? 'Other Channels';
+          grouped.putIfAbsent(cat, () => []).add(channel);
+        }
       }
 
       int runningIndex = 0;
@@ -2410,11 +2598,15 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                   final item = channels[localIndex];
                   final isFocused = _currentZone == VortexZone.content && _focusedGridIndex == globalIdx;
 
+                  final cardKey = _cardKeys.putIfAbsent(globalIdx, () => GlobalKey());
+
                   return GestureDetector(
+                    key: cardKey,
                     onTap: () {
                       setState(() {
                         _currentZone = VortexZone.content;
                         _focusedGridIndex = globalIdx;
+                        _lastFocusedGridIndex = globalIdx;
                       });
                       _playItem(item);
                     },
@@ -2482,9 +2674,25 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
     // Movies and Series: Multi-Category Sectioned View
     final Map<String, List<Channel>> grouped = {};
-    for (final item in displayedItems) {
-      final cat = item.group ?? (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series');
-      grouped.putIfAbsent(cat, () => []).add(item);
+
+    if (_activeFilter.type == VortexFilterType.all) {
+      for (final favCat in _favoriteCategories) {
+        final catItems = displayedItems.where((c) => c.group == favCat).toList();
+        if (catItems.isNotEmpty) {
+          grouped[favCat] = catItems;
+        }
+      }
+      for (final item in displayedItems) {
+        final cat = item.group ?? (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series');
+        if (!grouped.containsKey(cat)) {
+          grouped.putIfAbsent(cat, () => []).add(item);
+        }
+      }
+    } else {
+      for (final item in displayedItems) {
+        final cat = item.group ?? (_activeNav == VortexNavTarget.movies ? 'Movies' : 'Series');
+        grouped.putIfAbsent(cat, () => []).add(item);
+      }
     }
 
     final isSeries = _activeNav == VortexNavTarget.series;
@@ -2548,11 +2756,15 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                 final item = items[localIndex];
                 final isFocused = _currentZone == VortexZone.content && _focusedGridIndex == globalIdx;
 
+                final cardKey = _cardKeys.putIfAbsent(globalIdx, () => GlobalKey());
+
                 return GestureDetector(
+                  key: cardKey,
                   onTap: () {
                     setState(() {
                       _currentZone = VortexZone.content;
                       _focusedGridIndex = globalIdx;
+                      _lastFocusedGridIndex = globalIdx;
                     });
                     _playItem(item);
                   },
