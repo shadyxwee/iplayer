@@ -11,6 +11,7 @@ import '../services/vortextube_service.dart';
 import '../widgets/smooth_page_route.dart';
 import 'mobile_video_player_screen.dart';
 import 'series_detail_screen.dart';
+import 'playlist_manager_screen.dart';
 import 'video_player_screen.dart';
 
 enum VortexNavTarget {
@@ -27,8 +28,31 @@ enum VortexNavTarget {
 
 enum VortexZone { sidebar, searchBar, filterBar, content }
 
-enum VortexFilter { all, recent, topRated, inProgress, year2024, year2023, year2022, yearOlder }
-enum VortexSort { recommended, nameAsc, ratingDesc, yearDesc }
+enum VortexFilterType { all, recent, topRated, inProgress, category }
+
+class VortexActiveFilter {
+  final VortexFilterType type;
+  final String? categoryName;
+
+  const VortexActiveFilter._(this.type, [this.categoryName]);
+
+  static const all = VortexActiveFilter._(VortexFilterType.all);
+  static const recent = VortexActiveFilter._(VortexFilterType.recent);
+  static const topRated = VortexActiveFilter._(VortexFilterType.topRated);
+  static const inProgress = VortexActiveFilter._(VortexFilterType.inProgress);
+  static VortexActiveFilter category(String name) => VortexActiveFilter._(VortexFilterType.category, name);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VortexActiveFilter &&
+          runtimeType == other.runtimeType &&
+          type == other.type &&
+          categoryName == other.categoryName;
+
+  @override
+  int get hashCode => type.hashCode ^ categoryName.hashCode;
+}
 
 class VortexTubeScreen extends StatefulWidget {
   const VortexTubeScreen({super.key});
@@ -51,10 +75,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   Playlist? _activePlaylist;
   bool _isLoading = true;
 
-  // Filter State
-  VortexFilter _activeFilter = VortexFilter.all;
-  VortexSort _activeSort = VortexSort.recommended;
-  String _selectedCategoryFilter = 'All';
+  // Filter State - Strictly SINGLE active filter at a time
+  VortexActiveFilter _activeFilter = VortexActiveFilter.all;
   int _focusedFilterIndex = 0;
 
   // Infinite Scroll & Pagination
@@ -193,55 +215,30 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   void _applyFilter() {
     var items = List<Channel>.from(_scopedItems);
 
-    if (_selectedCategoryFilter != 'All') {
-      items = items.where((c) => c.group == _selectedCategoryFilter).toList();
-    }
-
-    switch (_activeFilter) {
-      case VortexFilter.all:
+    switch (_activeFilter.type) {
+      case VortexFilterType.all:
         break;
-      case VortexFilter.recent:
-        items = items.where((c) => c.lastPlayed != null).toList();
+      case VortexFilterType.recent:
+        items = items.where((c) => c.lastPlayed != null).toList()
+          ..sort((a, b) => (b.lastPlayed ?? DateTime(2000)).compareTo(a.lastPlayed ?? DateTime(2000)));
         break;
-      case VortexFilter.topRated:
-        items = items.where((c) => c.rating >= 6.5).toList();
+      case VortexFilterType.topRated:
+        items = items.where((c) => c.rating >= 6.0).toList()
+          ..sort((a, b) => b.rating.compareTo(a.rating));
         break;
-      case VortexFilter.inProgress:
+      case VortexFilterType.inProgress:
         items = items.where((c) => c.watchedMilliseconds > 0).toList();
         break;
-      case VortexFilter.year2024:
-        items = items.where((c) => c.name.contains('2024')).toList();
-        break;
-      case VortexFilter.year2023:
-        items = items.where((c) => c.name.contains('2023')).toList();
-        break;
-      case VortexFilter.year2022:
-        items = items.where((c) => c.name.contains('2022')).toList();
-        break;
-      case VortexFilter.yearOlder:
-        items = items.where((c) => !c.name.contains('2024') && !c.name.contains('2023') && !c.name.contains('2022')).toList();
+      case VortexFilterType.category:
+        if (_activeFilter.categoryName != null) {
+          items = items.where((c) => c.group == _activeFilter.categoryName).toList();
+        }
         break;
     }
 
-    switch (_activeSort) {
-      case VortexSort.recommended:
-        items.sort((a, b) => VortexTubeService.scoreItem(channel: b, lovedCategories: _favoriteCategories)
-            .compareTo(VortexTubeService.scoreItem(channel: a, lovedCategories: _favoriteCategories)));
-        break;
-      case VortexSort.nameAsc:
-        items.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-        break;
-      case VortexSort.ratingDesc:
-        items.sort((a, b) => b.rating.compareTo(a.rating));
-        break;
-      case VortexSort.yearDesc:
-        // Extract 4-digit year regex from name
-        int getYear(String name) {
-          final m = RegExp(r'\b(19\d\d|20\d\d)\b').firstMatch(name);
-          return m != null ? int.parse(m.group(1)!) : 0;
-        }
-        items.sort((a, b) => getYear(b.name).compareTo(getYear(a.name)));
-        break;
+    if (_activeFilter.type != VortexFilterType.recent && _activeFilter.type != VortexFilterType.topRated) {
+      items.sort((a, b) => VortexTubeService.scoreItem(channel: b, lovedCategories: _favoriteCategories)
+          .compareTo(VortexTubeService.scoreItem(channel: a, lovedCategories: _favoriteCategories)));
     }
 
     _filteredScopedItems = items;
@@ -490,9 +487,51 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                             Expanded(
                               child: TabBarView(
                                 children: [
-                                  // Tab 1: Playlists
-                                  ListView.builder(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                  // Tab 1: Playlists Manager with Add Button
+                                  Column(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 8),
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton.icon(
+                                            onPressed: () async {
+                                              final newPl = await showDialog<Playlist>(
+                                                context: context,
+                                                builder: (context) => const PlaylistDialog(),
+                                              );
+                                              if (newPl != null) {
+                                                await DatabaseService.addPlaylist(newPl);
+                                                await PreferencesService.setActivePlaylistId(newPl.id);
+                                                final updated = await DatabaseService.getAllPlaylists();
+                                                setDialogState(() {
+                                                  playlists.clear();
+                                                  playlists.addAll(updated);
+                                                  _activePlaylist = newPl;
+                                                });
+                                                setState(() {
+                                                  _activePlaylist = newPl;
+                                                });
+                                                _loadInitialData();
+                                              }
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFFFF0000),
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(vertical: 12),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                            ),
+                                            icon: const Icon(Icons.add_rounded, size: 20),
+                                            label: const Text(
+                                              'Add Playlist (M3U, Xtream, Stalker/MAG)',
+                                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: ListView.builder(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
                                     itemCount: playlists.length,
                                     itemBuilder: (context, index) {
                                       final pl = playlists[index];
@@ -588,6 +627,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                                         ),
                                       );
                                     },
+                                  ),
+                                      ),
+                                    ],
                                   ),
 
                                   // Tab 2: Loved Categories Manager
@@ -929,33 +971,32 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   void _applyFocusedFilter() {
-    final catFilters = _getAvailableCategoryFilters();
+    final catFilters = _getAvailableCategoryFilters().where((c) => c != 'All').toList();
     if (_focusedFilterIndex == 0) {
       setState(() {
-        _activeFilter = VortexFilter.all;
-        _selectedCategoryFilter = 'All';
+        _activeFilter = VortexActiveFilter.all;
         _applyFilter();
       });
     } else if (_focusedFilterIndex == 1) {
       setState(() {
-        _activeFilter = VortexFilter.recent;
+        _activeFilter = VortexActiveFilter.recent;
         _applyFilter();
       });
     } else if (_focusedFilterIndex == 2) {
       setState(() {
-        _activeFilter = VortexFilter.topRated;
+        _activeFilter = VortexActiveFilter.topRated;
         _applyFilter();
       });
     } else if (_focusedFilterIndex == 3) {
       setState(() {
-        _activeFilter = VortexFilter.inProgress;
+        _activeFilter = VortexActiveFilter.inProgress;
         _applyFilter();
       });
     } else {
       final catIdx = _focusedFilterIndex - 4;
-      if (catIdx < catFilters.length) {
+      if (catIdx >= 0 && catIdx < catFilters.length) {
         setState(() {
-          _selectedCategoryFilter = catFilters[catIdx];
+          _activeFilter = VortexActiveFilter.category(catFilters[catIdx]);
           _applyFilter();
         });
       }
@@ -973,6 +1014,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
     String query = '';
     List<Channel> searchResults = [];
+    int focusedSearchIndex = -1; // -1 means search input field focused, >= 0 means item focused
+    final popupFocusNode = FocusNode();
+    final popupTextFocusNode = FocusNode();
+    final popupScrollController = ScrollController();
 
     if (!mounted) return;
 
@@ -981,133 +1026,214 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            return Dialog(
-              backgroundColor: const Color(0xFF161616),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: Color(0xFF282828)),
-              ),
-              child: Container(
-                width: 680,
-                height: 580,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF0000).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.search_rounded, color: Color(0xFFFF0000)),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Search VortexTube',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    // Search Bar
-                    Container(
-                      height: 44,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF222222),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: Row(
+            void handleSearchKeyEvent(KeyEvent event) {
+              if (event is! KeyDownEvent) return;
+              final key = event.logicalKey;
+
+              if (key == LogicalKeyboardKey.escape) {
+                Navigator.pop(context);
+                return;
+              }
+
+              if (key == LogicalKeyboardKey.arrowDown) {
+                if (focusedSearchIndex < searchResults.length - 1) {
+                  setDialogState(() {
+                    focusedSearchIndex++;
+                    popupTextFocusNode.unfocus();
+                    popupFocusNode.requestFocus();
+                  });
+                  if (popupScrollController.hasClients) {
+                    popupScrollController.animateTo(
+                      (focusedSearchIndex * 54.0).clamp(0.0, popupScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                }
+              } else if (key == LogicalKeyboardKey.arrowUp) {
+                if (focusedSearchIndex > 0) {
+                  setDialogState(() {
+                    focusedSearchIndex--;
+                  });
+                  if (popupScrollController.hasClients) {
+                    popupScrollController.animateTo(
+                      (focusedSearchIndex * 54.0).clamp(0.0, popupScrollController.position.maxScrollExtent),
+                      duration: const Duration(milliseconds: 120),
+                      curve: Curves.easeOut,
+                    );
+                  }
+                } else if (focusedSearchIndex == 0) {
+                  setDialogState(() {
+                    focusedSearchIndex = -1;
+                    popupTextFocusNode.requestFocus();
+                  });
+                }
+              } else if (key == LogicalKeyboardKey.enter ||
+                  key == LogicalKeyboardKey.numpadEnter ||
+                  key == LogicalKeyboardKey.select) {
+                if (focusedSearchIndex >= 0 && focusedSearchIndex < searchResults.length) {
+                  final item = searchResults[focusedSearchIndex];
+                  Navigator.pop(context);
+                  _playItem(item);
+                }
+              }
+            }
+
+            return KeyboardListener(
+              focusNode: popupFocusNode,
+              autofocus: true,
+              onKeyEvent: handleSearchKeyEvent,
+              child: Dialog(
+                backgroundColor: const Color(0xFF161616),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: const BorderSide(color: Color(0xFF282828)),
+                ),
+                child: Container(
+                  width: 680,
+                  height: 580,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          const Icon(Icons.search_rounded, color: Color(0xFF888888), size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              autofocus: true,
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
-                              decoration: const InputDecoration(
-                                hintText: 'Type to search loved channels, movies, and series...',
-                                hintStyle: TextStyle(color: Color(0xFF717171), fontSize: 13),
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
-                              onChanged: (val) {
-                                setDialogState(() {
-                                  query = val.trim().toLowerCase();
-                                  if (query.isEmpty) {
-                                    searchResults = [];
-                                  } else {
-                                    searchResults = eligibleItems
-                                        .where((c) => c.name.toLowerCase().contains(query))
-                                        .take(20)
-                                        .toList();
-                                  }
-                                });
-                              },
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF0000).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(10),
                             ),
+                            child: const Icon(Icons.search_rounded, color: Color(0xFFFF0000)),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Search VortexTube',
+                            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Color(0xFFAAAAAA)),
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(color: Color(0xFF282828), height: 1),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: searchResults.isEmpty
-                          ? Center(
-                              child: Text(
-                                query.isEmpty ? 'Start typing to search your loved content' : 'No items matching "$query"',
-                                style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
+                      const SizedBox(height: 14),
+                      // Search Bar
+                      Container(
+                        height: 44,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF222222),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: focusedSearchIndex == -1 ? Colors.white : Colors.white24,
+                            width: focusedSearchIndex == -1 ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.search_rounded, color: Color(0xFF888888), size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                focusNode: popupTextFocusNode,
+                                autofocus: true,
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                                decoration: const InputDecoration(
+                                  hintText: 'Type to search loved channels, movies, and series...',
+                                  hintStyle: TextStyle(color: Color(0xFF717171), fontSize: 13),
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                onChanged: (val) {
+                                  setDialogState(() {
+                                    query = val.trim().toLowerCase();
+                                    focusedSearchIndex = -1;
+                                    if (query.isEmpty) {
+                                      searchResults = [];
+                                    } else {
+                                      searchResults = eligibleItems
+                                          .where((c) => c.name.toLowerCase().contains(query))
+                                          .take(25)
+                                          .toList();
+                                    }
+                                  });
+                                },
                               ),
-                            )
-                          : ListView.builder(
-                              itemCount: searchResults.length,
-                              itemBuilder: (context, index) {
-                                final item = searchResults[index];
-                                return ListTile(
-                                  leading: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      width: 48,
-                                      height: 36,
-                                      color: const Color(0xFF242424),
-                                      child: item.logo != null && item.logo!.isNotEmpty
-                                          ? Image.network(
-                                              item.logo!,
-                                              fit: BoxFit.contain,
-                                              errorBuilder: (_, __, ___) => const Icon(Icons.play_arrow, color: Colors.white70),
-                                            )
-                                          : const Icon(Icons.play_arrow, color: Colors.white70),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    item.name,
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                  ),
-                                  subtitle: Text(
-                                    item.group ?? 'Loved',
-                                    style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
-                                  ),
-                                  trailing: const Icon(Icons.play_circle_fill, color: Color(0xFFFF0000), size: 28),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    _playItem(item);
-                                  },
-                                );
-                              },
                             ),
-                    ),
-                  ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Divider(color: Color(0xFF282828), height: 1),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: searchResults.isEmpty
+                            ? Center(
+                                child: Text(
+                                  query.isEmpty ? 'Start typing to search your loved content' : 'No items matching "$query"',
+                                  style: const TextStyle(color: Color(0xFF888888), fontSize: 13),
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: popupScrollController,
+                                itemCount: searchResults.length,
+                                itemBuilder: (context, index) {
+                                  final item = searchResults[index];
+                                  final isItemFocused = focusedSearchIndex == index;
+
+                                  return Container(
+                                    margin: const EdgeInsets.symmetric(vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isItemFocused ? const Color(0xFF2A2A2A) : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: isItemFocused ? Border.all(color: Colors.white, width: 2) : null,
+                                    ),
+                                    child: ListTile(
+                                      leading: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          width: 48,
+                                          height: 36,
+                                          color: const Color(0xFF242424),
+                                          child: item.logo != null && item.logo!.isNotEmpty
+                                              ? Image.network(
+                                                  item.logo!,
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (_, __, ___) => const Icon(Icons.play_arrow, color: Colors.white70),
+                                                )
+                                              : const Icon(Icons.play_arrow, color: Colors.white70),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        item.name,
+                                        style: TextStyle(
+                                          color: isItemFocused ? Colors.white : const Color(0xFFE0E0E0),
+                                          fontWeight: isItemFocused ? FontWeight.bold : FontWeight.w500,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        item.group ?? 'Loved',
+                                        style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
+                                      ),
+                                      trailing: Icon(
+                                        Icons.play_circle_fill,
+                                        color: isItemFocused ? const Color(0xFFFF0000) : const Color(0xFF888888),
+                                        size: 26,
+                                      ),
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        _playItem(item);
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1502,72 +1628,48 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   Widget _buildTopFilterBar() {
-    final catFilters = _getAvailableCategoryFilters();
+    // DO NOT show filter bar on Home tab
+    if (_activeNav == VortexNavTarget.home) {
+      return const SizedBox.shrink();
+    }
 
-    final isMovieOrSeries = _activeNav == VortexNavTarget.movies || _activeNav == VortexNavTarget.series;
+    final catFilters = _getAvailableCategoryFilters().where((c) => c != 'All').toList();
 
     final filterPills = <Widget>[
-      _buildFilterPill('All', _activeFilter == VortexFilter.all && _selectedCategoryFilter == 'All', 0, () {
+      _buildFilterPill('All', _activeFilter == VortexActiveFilter.all, 0, () {
         setState(() {
-          _activeFilter = VortexFilter.all;
-          _selectedCategoryFilter = 'All';
+          _activeFilter = VortexActiveFilter.all;
           _applyFilter();
         });
       }),
-      _buildFilterPill('Recently Watched', _activeFilter == VortexFilter.recent, 1, () {
+      _buildFilterPill('Recently Watched', _activeFilter == VortexActiveFilter.recent, 1, () {
         setState(() {
-          _activeFilter = VortexFilter.recent;
+          _activeFilter = VortexActiveFilter.recent;
           _applyFilter();
         });
       }),
-      _buildFilterPill('Top Rated', _activeFilter == VortexFilter.topRated, 2, () {
+      _buildFilterPill('Top Rated', _activeFilter == VortexActiveFilter.topRated, 2, () {
         setState(() {
-          _activeFilter = VortexFilter.topRated;
+          _activeFilter = VortexActiveFilter.topRated;
           _applyFilter();
         });
       }),
-      _buildFilterPill('In Progress', _activeFilter == VortexFilter.inProgress, 3, () {
+      _buildFilterPill('In Progress', _activeFilter == VortexActiveFilter.inProgress, 3, () {
         setState(() {
-          _activeFilter = VortexFilter.inProgress;
+          _activeFilter = VortexActiveFilter.inProgress;
           _applyFilter();
         });
       }),
-      if (isMovieOrSeries) ...[
-        _buildFilterPill('2024', _activeFilter == VortexFilter.year2024, 4, () {
-          setState(() {
-            _activeFilter = VortexFilter.year2024;
-            _applyFilter();
-          });
-        }),
-        _buildFilterPill('2023', _activeFilter == VortexFilter.year2023, 5, () {
-          setState(() {
-            _activeFilter = VortexFilter.year2023;
-            _applyFilter();
-          });
-        }),
-        _buildFilterPill('2022', _activeFilter == VortexFilter.year2022, 6, () {
-          setState(() {
-            _activeFilter = VortexFilter.year2022;
-            _applyFilter();
-          });
-        }),
-        _buildFilterPill('Older', _activeFilter == VortexFilter.yearOlder, 7, () {
-          setState(() {
-            _activeFilter = VortexFilter.yearOlder;
-            _applyFilter();
-          });
-        }),
-      ],
     ];
 
     for (int i = 0; i < catFilters.length; i++) {
       final cat = catFilters[i];
-      if (cat == 'All') continue;
+      final targetFilter = VortexActiveFilter.category(cat);
       final idx = 4 + i;
       filterPills.add(
-        _buildFilterPill(cat, _selectedCategoryFilter == cat, idx, () {
+        _buildFilterPill(cat, _activeFilter == targetFilter, idx, () {
           setState(() {
-            _selectedCategoryFilter = cat;
+            _activeFilter = targetFilter;
             _applyFilter();
           });
         }),
@@ -1575,8 +1677,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     }
 
     return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 6), // Balanced equal top and bottom padding
       alignment: Alignment.centerLeft,
       child: ListView(
         controller: _filterBarScrollController,
@@ -1836,7 +1938,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 250,
+        width: 155, // 2:3 vertical poster card matching Movies/Series tabs
         margin: const EdgeInsets.only(right: 18),
         decoration: BoxDecoration(
           color: const Color(0xFF1E1E1E),
@@ -1848,7 +1950,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           boxShadow: isFocused
               ? [
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.25),
+                    color: Colors.white.withValues(alpha: 0.3),
                     blurRadius: 16,
                     spreadRadius: 1,
                   ),
@@ -1868,16 +1970,17 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                         ? Image.network(
                             item.logo!,
                             width: double.infinity,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 40),
+                            height: double.infinity,
+                            fit: BoxFit.cover, // Professional poster cover matching Movies/Series tab
+                            errorBuilder: (_, __, ___) => const Icon(Icons.movie_outlined, color: Colors.white24, size: 36),
                           )
-                        : const Icon(Icons.movie_creation_outlined, color: Colors.white24, size: 40),
+                        : const Icon(Icons.movie_outlined, color: Colors.white24, size: 36),
                   ),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1885,28 +1988,29 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                     item.name,
                     style: TextStyle(
                       color: isFocused ? Colors.white : const Color(0xFFE0E0E0),
-                      fontSize: 14,
+                      fontSize: 12.5,
                       fontWeight: isFocused ? FontWeight.bold : FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Row(
                     children: [
-                      Text(
-                        item.group ?? 'Loved Item',
-                        style: const TextStyle(color: Color(0xFF888888), fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Expanded(
+                        child: Text(
+                          item.group ?? 'Loved',
+                          style: const TextStyle(color: Color(0xFF888888), fontSize: 10.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      const Spacer(),
                       if (item.rating > 0) ...[
-                        const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                        const SizedBox(width: 3),
+                        const Icon(Icons.star_rounded, color: Colors.amber, size: 13),
+                        const SizedBox(width: 2),
                         Text(
                           item.rating.toStringAsFixed(1),
-                          style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ],
