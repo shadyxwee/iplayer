@@ -1,7 +1,7 @@
 use crate::db::{ChannelRecord, DbEngine, EpgProgramRecord, PlaylistRecord};
 use crate::epg::EpgParser;
 use crate::m3u::M3uParser;
-use crate::stalker::{StalkerConfig, StalkerEngine, StreamDetails};
+use crate::stalker::{MacCheckResult, StalkerCategory, StalkerConfig, StalkerEngine, StalkerItem, StreamDetails};
 use anyhow::Result;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
@@ -169,10 +169,51 @@ pub async fn stalker_handshake(portal_url: String, mac_address: String) -> Resul
     engine.handshake().await
 }
 
+pub async fn stalker_check_mac(portal_url: String, mac_address: String) -> MacCheckResult {
+    let config = StalkerConfig {
+        portal_url,
+        mac_address,
+        ..Default::default()
+    };
+    let engine = StalkerEngine::new(config);
+    engine.check_mac().await
+}
+
+pub async fn stalker_get_categories(
+    portal_url: String,
+    mac_address: String,
+    media_type: String,
+) -> Result<Vec<StalkerCategory>> {
+    let config = StalkerConfig {
+        portal_url,
+        mac_address,
+        ..Default::default()
+    };
+    let engine = StalkerEngine::new(config);
+    engine.get_categories(&media_type).await
+}
+
+pub async fn stalker_get_ordered_list(
+    portal_url: String,
+    mac_address: String,
+    media_type: String,
+    category_id: Option<String>,
+    page: u32,
+) -> Result<Vec<StalkerItem>> {
+    let config = StalkerConfig {
+        portal_url,
+        mac_address,
+        ..Default::default()
+    };
+    let engine = StalkerEngine::new(config);
+    engine.get_ordered_list(&media_type, category_id.as_deref(), page).await
+}
+
 pub async fn stalker_get_stream_details(
     portal_url: String,
     mac_address: String,
     cmd: String,
+    media_type: Option<String>,
 ) -> Result<StreamDetails> {
     let config = StalkerConfig {
         portal_url,
@@ -180,5 +221,5 @@ pub async fn stalker_get_stream_details(
         ..Default::default()
     };
     let engine = StalkerEngine::new(config);
-    engine.get_create_link(&cmd).await
+    engine.get_create_link(&cmd, media_type.as_deref()).await
 }

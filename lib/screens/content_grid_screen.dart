@@ -7,6 +7,7 @@ import '../services/m3u_parser.dart';
 import '../widgets/smooth_page_route.dart';
 import 'movie_detail_screen.dart';
 import 'video_player_screen.dart';
+import '../services/image_cache_service.dart';
 
 class ContentGridScreen extends StatefulWidget {
   final ContentType contentType;
@@ -35,12 +36,16 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
   String _sortBy = 'added';
   Channel? _featuredContent;
   bool _isLoading = true;
+  int _displayedCount = 20;
+  static const int _pageSize = 20;
+  bool _isLoadingMore = false;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadContent();
   }
 
@@ -51,6 +56,19 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
     super.dispose();
   }
 
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll > 0 && currentScroll >= maxScroll * 0.8) {
+      if (!_isLoadingMore && _displayedCount < _filteredContent.length) {
+        setState(() {
+          _displayedCount = (_displayedCount + _pageSize).clamp(0, _filteredContent.length);
+        });
+      }
+    }
+  }
   Future<void> _loadContent() async {
     final allChannels = await DatabaseService.getAllChannels();
     final content = allChannels
@@ -137,6 +155,7 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
 
     setState(() {
       _filteredContent = filtered;
+      _displayedCount = 20;
     });
   }
 
@@ -567,8 +586,10 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
 
   Widget _buildContentCard(Channel content, {required double width, bool showProgress = false}) {
     bool isHovered = false;
+    final stableKey = ValueKey('channel_${content.id}_${content.url}_${content.name}');
 
     return StatefulBuilder(
+      key: stableKey,
       builder: (context, setState) {
         return MouseRegion(
           onEnter: (_) => setState(() => isHovered = true),
@@ -581,7 +602,7 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
               onTap: () => _showDetails(content),
               borderRadius: BorderRadius.circular(12),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 140),
                 transform: isHovered ? Matrix4.translationValues(0.0, -3.0, 0.0) : Matrix4.identity(),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1B1A32),
@@ -597,17 +618,44 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
+                    // Fixed 2:3 aspect ratio container with layout stability and shimmer/placeholder
+                    AspectRatio(
+                      aspectRatio: 2 / 3,
                       child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                        child: content.logo != null && content.logo!.isNotEmpty
-                            ? Image.network(
-                                content.logo!,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
-                              )
-                            : const Center(child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 40)),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                        child: Container(
+                          color: const Color(0xFF141324),
+                          child: (content.logo != null && content.logo!.isNotEmpty)
+                              ? Image(
+                                  image: ImageCacheService.getCachedImageProvider(content.logo!),
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      color: const Color(0xFF18172C),
+                                      child: const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Color(0xFF6366F1),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 36),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(Icons.movie, color: Color(0xFF8F92A9), size: 36),
+                                ),
+                        ),
                       ),
                     ),
                     Padding(
@@ -654,18 +702,32 @@ class _ContentGridScreenState extends State<ContentGridScreen> {
   }
 
   Widget _buildFilteredGridView() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _filteredContent.length,
-      itemBuilder: (context, index) {
-        return _buildContentCard(_filteredContent[index], width: 160);
+    final count = _displayedCount.clamp(0, _filteredContent.length);
+    return NotificationListener<ScrollNotification>(
+      onNotification: (scrollInfo) {
+        if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent * 0.8) {
+          if (_displayedCount < _filteredContent.length) {
+            setState(() {
+              _displayedCount = (_displayedCount + _pageSize).clamp(0, _filteredContent.length);
+            });
+          }
+        }
+        return false;
       },
+      child: GridView.builder(
+        padding: const EdgeInsets.all(24),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 5,
+          childAspectRatio: 2 / 3.4,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: count,
+        itemBuilder: (context, index) {
+          final item = _filteredContent[index];
+          return _buildContentCard(item, width: 160);
+        },
+      ),
     );
   }
 

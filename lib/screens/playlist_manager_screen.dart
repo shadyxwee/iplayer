@@ -6,6 +6,7 @@ import '../providers/theme_provider.dart';
 import '../services/database_service.dart';
 import '../services/m3u_parser.dart';
 import '../services/epg_service.dart';
+import '../services/stalker_service.dart';
 import '../services/xtream_service.dart';
 import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
@@ -88,7 +89,61 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
     try {
       List<Channel> channels = [];
 
-      if (playlist.isXtreamCodes) {
+      if (playlist.isStalker) {
+        // Handle Stalker / Ministra portal source
+        final service = StalkerService(
+          portalUrl: playlist.url,
+          macAddress: playlist.macAddress ?? '00:1A:79:00:00:00',
+          serialNumber: playlist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
+          deviceId: playlist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
+          deviceId2: playlist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
+          signature: playlist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
+        );
+
+        // Fetch LIVE CHANNELS
+        final liveResult = await service.getLiveChannels();
+        if (liveResult['success'] == true) {
+          channels.addAll(liveResult['channels'] as List<Channel>);
+        }
+
+        // Fetch MOVIES (VOD)
+        final moviesResult = await service.getMovies();
+        if (moviesResult['success'] == true) {
+          final movies = moviesResult['movies'] as List;
+          for (var movie in movies) {
+            final channel = Channel()
+              ..name = movie.name
+              ..url = movie.streamUrl
+              ..logo = movie.streamIcon ?? movie.posterUrl
+              ..group = movie.categoryName
+              ..description = movie.plot
+              ..tvgId = movie.streamId
+              ..userAgent = StalkerService.userAgent
+              ..referer = '${StalkerService.normalizeUrl(playlist.url)}/c/'
+              ..contentType = ContentType.movie;
+            channels.add(channel);
+          }
+        }
+
+        // Fetch SERIES
+        final seriesResult = await service.getSeries();
+        if (seriesResult['success'] == true) {
+          final seriesList = seriesResult['series'] as List;
+          for (var series in seriesList) {
+            final channel = Channel()
+              ..name = series.name
+              ..url = 'stalker://series/${series.id}'
+              ..logo = series.cover ?? series.posterUrl
+              ..group = series.categoryName
+              ..description = series.plot
+              ..userAgent = StalkerService.userAgent
+              ..referer = '${StalkerService.normalizeUrl(playlist.url)}/c/'
+              ..tvgId = int.tryParse(series.id)
+              ..contentType = ContentType.series;
+            channels.add(channel);
+          }
+        }
+      } else if (playlist.isXtreamCodes) {
         // Handle Xtream Codes source
         final service = XtreamService(
           baseUrl: playlist.url,
@@ -190,7 +245,11 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
         final seriesCount = channels.where((c) => c.contentType == ContentType.series).length;
 
         String message;
-        if (playlist.isXtreamCodes) {
+        if (playlist.isStalker) {
+          message = isEdit
+            ? 'Stalker Playlist updated:\n$liveCount live channels\n$movieCount movies\n$seriesCount series'
+            : 'Stalker Playlist added:\n$liveCount live channels\n$movieCount movies\n$seriesCount series';
+        } else if (playlist.isXtreamCodes) {
           message = isEdit
             ? l10n.xtreamPlaylistUpdated(liveCount, movieCount, seriesCount)
             : l10n.xtreamPlaylistAdded(liveCount, movieCount, seriesCount);
@@ -855,7 +914,11 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
                     ],
                   ),
                   child: Icon(
-                    playlist.isXtreamCodes ? Icons.dns_rounded : Icons.playlist_play_rounded,
+                    playlist.isStalker
+                        ? Icons.router_rounded
+                        : playlist.isXtreamCodes
+                            ? Icons.dns_rounded
+                            : Icons.playlist_play_rounded,
                     color: isActive ? Colors.black : Colors.white.withOpacity(0.6),
                     size: 32,
                   ),
@@ -1135,6 +1198,10 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
   late TextEditingController _hostController;
   late TextEditingController _usernameController;
   late TextEditingController _passwordController;
+  late TextEditingController _macController;
+  late TextEditingController _serialController;
+  late TextEditingController _deviceIdController;
+  bool _showAdvancedStalker = false;
   late PlaylistSourceType _sourceType;
   bool _isVerifying = false;
   bool _showPassword = false;
@@ -1150,6 +1217,9 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
     _usernameController = TextEditingController(text: widget.playlist?.username ?? '');
     _passwordController = TextEditingController(text: widget.playlist?.password ?? '');
     _hostController = TextEditingController(text: widget.playlist?.url ?? '');
+    _macController = TextEditingController(text: widget.playlist?.macAddress ?? '00:1A:79:');
+    _serialController = TextEditingController(text: widget.playlist?.serialNumber ?? '');
+    _deviceIdController = TextEditingController(text: widget.playlist?.deviceId ?? '');
     _sourceType = widget.playlist?.sourceType ?? PlaylistSourceType.m3u;
 
     // Add listeners for auto-detection
@@ -1216,7 +1286,56 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
     _hostController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _macController.dispose();
+    _serialController.dispose();
+    _deviceIdController.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyStalkerMac() async {
+    final url = _hostController.text.trim();
+    final mac = _macController.text.trim();
+
+    if (url.isEmpty || mac.isEmpty) {
+      setState(() => _verificationMessage = 'Please enter Portal URL and MAC Address');
+      return;
+    }
+
+    setState(() {
+      _isVerifying = true;
+      _verificationMessage = null;
+    });
+
+    try {
+      final service = StalkerService(
+        portalUrl: url,
+        macAddress: mac,
+        serialNumber: _serialController.text.trim().isNotEmpty ? _serialController.text.trim() : 'MAG254_SERIAL_DEFAULT',
+        deviceId: _deviceIdController.text.trim().isNotEmpty ? _deviceIdController.text.trim() : 'MAG254_DEVICE_ID_DEFAULT',
+      );
+
+      final result = await service.checkMac();
+
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+          if (result['is_working'] == true) {
+            final exp = result['expiry_date'] != null ? ' (Exp: ${result['expiry_date']})' : '';
+            final status = result['status'] ?? 'Active';
+            _verificationMessage = 'MAC verified successfully! Status: $status$exp';
+          } else {
+            _verificationMessage = 'Verification failed: ${result['message'] ?? 'Invalid MAC or portal'}';
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+          _verificationMessage = 'Error verifying MAC: $e';
+        });
+      }
+    }
   }
 
   Future<void> _verifyXtreamCredentials() async {
@@ -1397,6 +1516,31 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
                         ),
                       ),
                     ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _sourceType = PlaylistSourceType.stalker),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _sourceType == PlaylistSourceType.stalker
+                                ? theme.accentPrimary.withOpacity(0.3)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.horizontal(
+                              right: Radius.circular(_sourceType == PlaylistSourceType.stalker ? 12 : 8),
+                            ),
+                          ),
+                          child: Text(
+                            'Stalker / MAC',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1422,6 +1566,133 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
                     return null;
                   },
                 ),
+              ],
+
+              // Stalker / MAC Form
+              if (_sourceType == PlaylistSourceType.stalker) ...[
+                _buildTextField(
+                  controller: _hostController,
+                  label: 'Portal URL',
+                  hint: 'http://example.com/c/',
+                  icon: Icons.router_outlined,
+                  theme: theme,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter portal URL';
+                    }
+                    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+                      return l10n.protocolValidation;
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _macController,
+                  label: 'MAC Address',
+                  hint: '00:1A:79:XX:XX:XX',
+                  icon: Icons.perm_identity,
+                  theme: theme,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Enter MAC address';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () => setState(() => _showAdvancedStalker = !_showAdvancedStalker),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _showAdvancedStalker ? Icons.expand_less : Icons.expand_more,
+                          color: theme.accentPrimary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Advanced MAG parameters (optional)',
+                          style: TextStyle(
+                            color: theme.accentPrimary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showAdvancedStalker) ...[
+                  const SizedBox(height: 8),
+                  _buildTextField(
+                    controller: _serialController,
+                    label: 'Serial Number',
+                    hint: 'MAG254_SERIAL_DEFAULT',
+                    icon: Icons.confirmation_number_outlined,
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTextField(
+                    controller: _deviceIdController,
+                    label: 'Device ID',
+                    hint: 'MAG254_DEVICE_ID_DEFAULT',
+                    icon: Icons.devices,
+                    theme: theme,
+                  ),
+                ],
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _verifyStalkerMac,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green.shade600,
+                      disabledBackgroundColor: Colors.grey.withOpacity(0.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isVerifying
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text(
+                            'Verify MAC / Portal',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+                if (_verificationMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _verificationMessage!.contains('successfully') || _verificationMessage!.contains('verificadas')
+                          ? Colors.green.withOpacity(0.2)
+                          : Colors.red.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _verificationMessage!.contains('successfully') || _verificationMessage!.contains('verificadas')
+                            ? Colors.green.withOpacity(0.5)
+                            : Colors.red.withOpacity(0.5),
+                      ),
+                    ),
+                    child: Text(
+                      _verificationMessage!,
+                      style: TextStyle(
+                        color: _verificationMessage!.contains('successfully') || _verificationMessage!.contains('verificadas') ? Colors.green : Colors.red,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
               ],
 
               // Xtream Codes Form
@@ -1632,10 +1903,19 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
         playlist.url = _urlController.text.trim();
         playlist.username = null;
         playlist.password = null;
+        playlist.macAddress = null;
+      } else if (_sourceType == PlaylistSourceType.stalker) {
+        playlist.url = StalkerService.normalizeUrl(_hostController.text.trim());
+        playlist.macAddress = _macController.text.trim();
+        playlist.serialNumber = _serialController.text.trim().isNotEmpty ? _serialController.text.trim() : null;
+        playlist.deviceId = _deviceIdController.text.trim().isNotEmpty ? _deviceIdController.text.trim() : null;
+        playlist.username = null;
+        playlist.password = null;
       } else {
         playlist.url = _hostController.text.trim().replaceAll(RegExp(r'/*$'), '');
         playlist.username = _usernameController.text.trim();
         playlist.password = _passwordController.text.trim();
+        playlist.macAddress = null;
       }
 
       playlist.lastUpdated = DateTime.now();

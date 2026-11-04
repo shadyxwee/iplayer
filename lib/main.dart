@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/database_service.dart';
+import 'services/image_cache_service.dart';
 import 'services/config_service.dart';
 import 'services/m3u_parser.dart';
 import 'services/xtream_service.dart';
@@ -33,6 +34,9 @@ void main() async {
     await DatabaseService.initialize();
     print('Database initialized');
 
+    await ImageCacheService.initialize();
+    print('ImageCacheService initialized');
+
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       await windowManager.ensureInitialized();
 
@@ -40,10 +44,9 @@ void main() async {
         size: Size(1280, 720),
         minimumSize: Size(800, 600),
         center: true,
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0F0F0F),
         skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.normal,
-        title: 'RIPTV',
+        titleBarStyle: TitleBarStyle.hidden,
       );
 
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -160,6 +163,25 @@ class _MyAppState extends State<MyApp> {
                   brightness: Brightness.dark,
                   scaffoldBackgroundColor: const Color(0xFF0A0A0A),
                 ),
+                builder: (context, child) {
+                  final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+                  if (!isDesktop) return child ?? const SizedBox.shrink();
+
+                  return Column(
+                    children: [
+                      // Minimalist Dark Title Bar: Dark background (#0F0F0F), no app icon, no app name,
+                      // and functional window controls (minimize, maximize/restore, close) on the right
+                      const SizedBox(
+                        height: 32,
+                        child: WindowCaption(
+                          backgroundColor: Color(0xFF0F0F0F),
+                          brightness: Brightness.dark,
+                        ),
+                      ),
+                      Expanded(child: child ?? const SizedBox.shrink()),
+                    ],
+                  );
+                },
                 home: const SplashScreen(),
               );
             },

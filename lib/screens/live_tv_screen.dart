@@ -8,10 +8,13 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../models/channel.dart';
 import '../services/database_service.dart';
+import '../services/preferences_service.dart';
 
 enum NavigationZone { categories, channels, playerSurface, playerControls }
 
 enum PlayerControlTarget { playPause, volume, aspectRatio, favorite, fullscreen }
+
+enum SearchTarget { channels, categories }
 
 class LiveTVScreen extends StatefulWidget {
   const LiveTVScreen({super.key});
@@ -34,12 +37,15 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   final ScrollController _channelScrollController = ScrollController();
 
   // Data State
-  List<String> _categories = ['All'];
+  List<String> _allCategories = ['All'];
+  List<String> _filteredCategories = ['All'];
+  Set<String> _favoriteCategories = {};
   String _selectedCategory = 'All';
   List<Channel> _allChannels = [];
   List<Channel> _filteredChannels = [];
   Channel? _selectedChannel;
   String _searchQuery = '';
+  SearchTarget _searchTarget = SearchTarget.channels;
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
 
@@ -49,8 +55,10 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   bool _isPlayerLoading = false;
   String? _playerError;
   bool _isFullscreen = false;
+  bool _isPlaying = false;
   double _volume = 100.0;
   String _aspectRatioMode = '16:9';
+  StreamSubscription<bool>? _playingSubscription;
 
   // Controls Visibility & Auto-Hide Timer
   bool _isControlsVisible = true;
@@ -101,15 +109,48 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       displayChannels = _generateSampleChannels();
     }
 
+    // Load favorite categories
+    final favCategoriesList = await PreferencesService.getFavoriteCategories();
+    final favCategoriesSet = favCategoriesList.toSet();
+
+    // State persistence: restore last selected category
+    final savedCategory = await PreferencesService.getLastSelectedCategory();
+    String activeCategory = 'All';
+    if (savedCategory != null && categories.contains(savedCategory)) {
+      activeCategory = savedCategory;
+    }
+
+    final catIndex = categories.indexOf(activeCategory);
+
+    // Filter channels for the selected category
+    List<Channel> initialFilteredChannels = displayChannels;
+    if (activeCategory != 'All') {
+      initialFilteredChannels = displayChannels.where((c) => c.group == activeCategory).toList();
+    }
+
+    // Restore last focused channel inside this category
+    final savedChannelName = await PreferencesService.getLastFocusedChannel(activeCategory);
+    int initialChannelIndex = 0;
+    if (savedChannelName != null) {
+      final foundIdx = initialFilteredChannels.indexWhere((c) => c.name == savedChannelName);
+      if (foundIdx != -1) {
+        initialChannelIndex = foundIdx;
+      }
+    }
+
     setState(() {
       _allChannels = displayChannels;
-      _filteredChannels = displayChannels;
-      _categories = categories;
+      _filteredChannels = initialFilteredChannels;
+      _allCategories = categories;
+      _filteredCategories = categories;
+      _favoriteCategories = favCategoriesSet;
+      _selectedCategory = activeCategory;
+      _focusedCategoryIndex = catIndex != -1 ? catIndex : 0;
+      _focusedChannelIndex = initialChannelIndex;
       _isLoading = false;
 
       if (_filteredChannels.isNotEmpty) {
-        _selectedChannel = _filteredChannels.first;
-        _focusedChannelIndex = 0;
+        _selectedChannel = _filteredChannels[_focusedChannelIndex];
         _initPlayerForChannel(_selectedChannel!);
       }
     });
@@ -150,13 +191,28 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
         native.setProperty('demuxer-readahead-secs', '15');
       } catch (_) {}
 
+      // Keep play/pause button state in perfect sync
+      _playingSubscription?.cancel();
+      _playingSubscription = newPlayer.stream.playing.listen((playing) {
+        if (mounted) {
+          setState(() {
+            _isPlaying = playing;
+          });
+        }
+      });
+
+      final Map<String, String> headers = {
+        'User-Agent': channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10) IPTV-Player/1.0',
+        'Connection': 'keep-alive',
+      };
+      if (channel.referer != null) {
+        headers['Referer'] = channel.referer!;
+      }
+
       await newPlayer.open(
         Media(
           channel.url,
-          httpHeaders: {
-            'User-Agent': channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10) IPTV-Player/1.0',
-            if (channel.referer != null) 'Referer': channel.referer!,
-          },
+          httpHeaders: headers,
         ),
         play: true,
       );
@@ -167,6 +223,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           _player = newPlayer;
           _controller = newController;
           _isPlayerLoading = false;
+          _isPlaying = true;
         });
       }
     } catch (e) {
@@ -174,19 +231,40 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
         setState(() {
           _playerError = e.toString();
           _isPlayerLoading = false;
+          _isPlaying = false;
         });
       }
     }
   }
 
-  void _filterChannels() {
+  void _filterData() {
+    if (_searchTarget == SearchTarget.categories) {
+      // Filter categories
+      if (_searchQuery.trim().isEmpty) {
+        _filteredCategories = _allCategories;
+      } else {
+        _filteredCategories = _allCategories
+            .where((cat) => cat.toLowerCase().contains(_searchQuery.toLowerCase()))
+            .toList();
+      }
+      _focusedCategoryIndex = 0;
+      // Filter channels for the selected category
+      _filterChannelsOnly();
+    } else {
+      // Filter channels
+      _filteredCategories = _allCategories;
+      _filterChannelsOnly();
+    }
+  }
+
+  void _filterChannelsOnly() {
     List<Channel> filtered = _allChannels;
 
     if (_selectedCategory != 'All') {
       filtered = filtered.where((c) => c.group == _selectedCategory).toList();
     }
 
-    if (_searchQuery.isNotEmpty) {
+    if (_searchTarget == SearchTarget.channels && _searchQuery.trim().isNotEmpty) {
       filtered = filtered
           .where((c) => c.name.toLowerCase().contains(_searchQuery.toLowerCase()))
           .toList();
@@ -202,17 +280,36 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return;
 
-    // Guard: ignore arrow navigation if typing in search input field
-    if (_searchFocusNode.hasFocus) {
-      if (event.logicalKey == LogicalKeyboardKey.escape) {
+    final key = event.logicalKey;
+
+    // Fullscreen exit via Escape key must always work immediately
+    if (key == LogicalKeyboardKey.escape) {
+      if (_isFullscreen) {
+        _toggleFullscreen();
+        return;
+      }
+      if (_searchFocusNode.hasFocus) {
         _searchFocusNode.unfocus();
         _screenFocusNode.requestFocus();
+        return;
+      }
+      _handleBack();
+      return;
+    }
+
+    // Guard: ignore arrow navigation if typing in search input field
+    if (_searchFocusNode.hasFocus) {
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _searchFocusNode.unfocus();
+        _screenFocusNode.requestFocus();
+        setState(() {
+          _currentZone = NavigationZone.channels;
+        });
       }
       return;
     }
 
     _showControls();
-    final key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.arrowUp) {
       _moveUp();
@@ -222,9 +319,12 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       _moveLeft();
     } else if (key == LogicalKeyboardKey.arrowRight) {
       _moveRight();
-    } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter || key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.space) {
+    } else if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.space) {
       _activateCurrent();
-    } else if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+    } else if (key == LogicalKeyboardKey.goBack) {
       _handleBack();
     }
   }
@@ -261,7 +361,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     setState(() {
       switch (_currentZone) {
         case NavigationZone.categories:
-          if (_focusedCategoryIndex < _categories.length - 1) {
+          if (_focusedCategoryIndex < _filteredCategories.length - 1) {
             _focusedCategoryIndex++;
             _ensureVisibleCategory(_focusedCategoryIndex);
           }
@@ -293,19 +393,28 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
         case NavigationZone.channels:
           _currentZone = NavigationZone.categories;
+          // Sync focused category index to selected category
+          final idx = _filteredCategories.indexOf(_selectedCategory);
+          if (idx != -1) {
+            _focusedCategoryIndex = idx;
+            _ensureVisibleCategory(_focusedCategoryIndex);
+          }
           break;
 
         case NavigationZone.playerSurface:
         case NavigationZone.playerControls:
-          if (_currentZone == NavigationZone.playerControls && _focusedControl != PlayerControlTarget.playPause) {
+          if (_currentZone == NavigationZone.playerControls &&
+              _focusedControl != PlayerControlTarget.playPause) {
             final prevIndex = PlayerControlTarget.values.indexOf(_focusedControl) - 1;
             if (prevIndex >= 0) {
               _focusedControl = PlayerControlTarget.values[prevIndex];
             } else {
               _currentZone = NavigationZone.channels;
+              _ensureVisibleChannel(_focusedChannelIndex);
             }
           } else {
             _currentZone = NavigationZone.channels;
+            _ensureVisibleChannel(_focusedChannelIndex);
           }
           break;
       }
@@ -317,6 +426,7 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       switch (_currentZone) {
         case NavigationZone.categories:
           _currentZone = NavigationZone.channels;
+          _ensureVisibleChannel(_focusedChannelIndex);
           break;
 
         case NavigationZone.channels:
@@ -340,10 +450,14 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
   void _activateCurrent() {
     switch (_currentZone) {
       case NavigationZone.categories:
-        setState(() {
-          _selectedCategory = _categories[_focusedCategoryIndex];
-          _filterChannels();
-        });
+        if (_focusedCategoryIndex < _filteredCategories.length) {
+          final cat = _filteredCategories[_focusedCategoryIndex];
+          setState(() {
+            _selectedCategory = cat;
+            PreferencesService.setLastSelectedCategory(cat);
+            _filterChannelsOnly();
+          });
+        }
         break;
 
       case NavigationZone.channels:
@@ -352,12 +466,13 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
           setState(() {
             _selectedChannel = selected;
           });
+          PreferencesService.setLastFocusedChannel(_selectedCategory, selected.name);
           _initPlayerForChannel(selected);
         }
         break;
 
       case NavigationZone.playerSurface:
-        _player?.playOrPause();
+        _togglePlayPause();
         break;
 
       case NavigationZone.playerControls:
@@ -366,10 +481,16 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     }
   }
 
+  void _togglePlayPause() {
+    if (_player != null) {
+      _player!.playOrPause();
+    }
+  }
+
   void _executeControlAction(PlayerControlTarget target) {
     switch (target) {
       case PlayerControlTarget.playPause:
-        _player?.playOrPause();
+        _togglePlayPause();
         break;
 
       case PlayerControlTarget.volume:
@@ -426,29 +547,46 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
     }
   }
 
+  /// Scrolling with center alignment so focused item does not get pinned to top
   void _ensureVisibleCategory(int index) {
-    if (_categoryScrollController.hasClients) {
-      _categoryScrollController.animateTo(
-        (index * 32.0).clamp(0.0, _categoryScrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      );
-    }
+    if (!_categoryScrollController.hasClients) return;
+    const double itemHeight = 36.0;
+    final double viewportHeight = _categoryScrollController.position.viewportDimension;
+    final double targetOffset = (index * itemHeight) - (viewportHeight / 2) + (itemHeight / 2);
+    final double clampedOffset = targetOffset.clamp(
+      0.0,
+      _categoryScrollController.position.maxScrollExtent,
+    );
+
+    _categoryScrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
   }
 
+  /// Scrolling with center alignment so focused channel is kept in comfortable view
   void _ensureVisibleChannel(int index) {
-    if (_channelScrollController.hasClients) {
-      _channelScrollController.animateTo(
-        (index * 48.0).clamp(0.0, _channelScrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      );
-    }
+    if (!_channelScrollController.hasClients) return;
+    const double itemHeight = 56.0;
+    final double viewportHeight = _channelScrollController.position.viewportDimension;
+    final double targetOffset = (index * itemHeight) - (viewportHeight / 2) + (itemHeight / 2);
+    final double clampedOffset = targetOffset.clamp(
+      0.0,
+      _channelScrollController.position.maxScrollExtent,
+    );
+
+    _channelScrollController.animateTo(
+      clampedOffset,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+    );
   }
 
   @override
   void dispose() {
     _hideControlsTimer?.cancel();
+    _playingSubscription?.cancel();
     _screenFocusNode.dispose();
     _searchFocusNode.dispose();
     _categoryScrollController.dispose();
@@ -540,57 +678,97 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
 
           // Category Scroll List
           Expanded(
-            child: ListView.builder(
-              controller: _categoryScrollController,
-              padding: const EdgeInsets.vertical(8),
-              itemCount: _categories.length,
-              itemBuilder: (context, index) {
-                final category = _categories[index];
-                final isSelected = category == _selectedCategory;
-                final isFocused = _currentZone == NavigationZone.categories && index == _focusedCategoryIndex;
+            child: _filteredCategories.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'No categories matching "$_searchQuery"',
+                        style: const TextStyle(color: Color(0xFF737C98), fontSize: 11),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _categoryScrollController,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _filteredCategories.length,
+                    itemBuilder: (context, index) {
+                      final category = _filteredCategories[index];
+                      final isSelected = category == _selectedCategory;
+                      final isFocused = _currentZone == NavigationZone.categories && index == _focusedCategoryIndex;
 
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _currentZone = NavigationZone.categories;
-                      _focusedCategoryIndex = index;
-                      _selectedCategory = category;
-                      _filterChannels();
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isFocused
-                          ? const Color(0xFF252A42)
-                          : isSelected
-                              ? const Color(0xFF1A1D30).withValues(alpha: 0.6)
-                              : Colors.transparent,
-                      border: Border(
-                        left: BorderSide(
-                          color: isFocused
-                              ? const Color(0xFF00E5FF)
-                              : isSelected
-                                  ? const Color(0xFF5764D8)
-                                  : Colors.transparent,
-                          width: isFocused ? 3 : 2,
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _currentZone = NavigationZone.categories;
+                            _focusedCategoryIndex = index;
+                            _selectedCategory = category;
+                            PreferencesService.setLastSelectedCategory(category);
+                            _filterChannelsOnly();
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isFocused
+                                ? const Color(0xFF252A42)
+                                : isSelected
+                                    ? const Color(0xFF1A1D30).withValues(alpha: 0.6)
+                                    : Colors.transparent,
+                            border: Border(
+                              left: BorderSide(
+                                color: isFocused
+                                    ? const Color(0xFF00E5FF)
+                                    : isSelected
+                                        ? const Color(0xFF5764D8)
+                                        : Colors.transparent,
+                                width: isFocused ? 3 : 2,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  category,
+                                  style: TextStyle(
+                                    color: isFocused || isSelected ? Colors.white : const Color(0xFF737C98),
+                                    fontSize: 11,
+                                    fontWeight: isSelected || isFocused ? FontWeight.bold : FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (category != 'All')
+                                GestureDetector(
+                                  onTap: () async {
+                                    final isNowFav = await PreferencesService.toggleFavoriteCategory(category);
+                                    setState(() {
+                                      if (isNowFav) {
+                                        _favoriteCategories.add(category);
+                                      } else {
+                                        _favoriteCategories.remove(category);
+                                      }
+                                    });
+                                  },
+                                  child: Icon(
+                                    _favoriteCategories.contains(category)
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    size: 14,
+                                    color: _favoriteCategories.contains(category)
+                                        ? const Color(0xFFE5283B)
+                                        : const Color(0xFF555D77),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                    child: Text(
-                      category,
-                      style: TextStyle(
-                        color: isFocused || isSelected ? Colors.white : const Color(0xFF737C98),
-                        fontSize: 11,
-                        fontWeight: isSelected || isFocused ? FontWeight.bold : FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -607,166 +785,243 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
       ),
       child: Column(
         children: [
-          // Search & Tools Bar
+          // Search Bar & Filter Target Toggle
           Container(
-            height: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Color(0xFF1B1E30), width: 1)),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: Container(
-                    height: 32,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF171A2B),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF24283F)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.search, color: Color(0xFF5E6682), size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                            decoration: const InputDecoration(
-                              hintText: 'Search',
-                              hintStyle: TextStyle(color: Color(0xFF575F7A), fontSize: 12),
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            onChanged: (val) {
-                              setState(() => _searchQuery = val);
-                              _filterChannels();
-                            },
-                          ),
-                        ),
-                      ],
+                // Search Input Field
+                Container(
+                  height: 34,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF171A2B),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: _searchFocusNode.hasFocus
+                          ? const Color(0xFF00E5FF)
+                          : const Color(0xFF24283F),
                     ),
                   ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, color: Color(0xFF5E6682), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          focusNode: _searchFocusNode,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: _searchTarget == SearchTarget.channels
+                                ? 'Search Channels...'
+                                : 'Search Categories...',
+                            hintStyle: const TextStyle(color: Color(0xFF575F7A), fontSize: 12),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          onChanged: (val) {
+                            setState(() => _searchQuery = val);
+                            _filterData();
+                          },
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                            _filterData();
+                          },
+                          child: const Icon(Icons.clear, color: Color(0xFF707994), size: 16),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.calendar_today, color: Color(0xFF707994), size: 16),
-                  onPressed: () {},
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh, color: Color(0xFF707994), size: 16),
-                  onPressed: _loadData,
+                const SizedBox(height: 6),
+                // Radio Target Selector: Categories vs Channels
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSearchTargetOption(SearchTarget.channels, 'Channels'),
+                    const SizedBox(width: 12),
+                    _buildSearchTargetOption(SearchTarget.categories, 'Categories'),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Channel Rows List
+          // Channel Rows List or Empty State
           Expanded(
-            child: ListView.builder(
-              controller: _channelScrollController,
-              itemCount: _filteredChannels.length,
-              itemBuilder: (context, index) {
-                final channel = _filteredChannels[index];
-                final isSelected = _selectedChannel?.name == channel.name;
-                final isFocused = _currentZone == NavigationZone.channels && index == _focusedChannelIndex;
-
-                return InkWell(
-                  onTap: () {
-                    setState(() {
-                      _currentZone = NavigationZone.channels;
-                      _focusedChannelIndex = index;
-                      _selectedChannel = channel;
-                      _initPlayerForChannel(channel);
-                    });
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 100),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      gradient: isSelected
-                          ? const LinearGradient(
-                              colors: [Color(0xFF2B3054), Color(0xFF1F233F)],
-                            )
-                          : isFocused
-                              ? const LinearGradient(
-                                  colors: [Color(0xFF232747), Color(0xFF1A1D36)],
-                                )
-                              : null,
-                      border: Border(
-                        left: BorderSide(
-                          color: isFocused
-                              ? const Color(0xFF00E5FF)
-                              : isSelected
-                                  ? const Color(0xFF5B68DF)
-                                  : Colors.transparent,
-                          width: isFocused ? 3 : 2,
-                        ),
-                        bottom: const BorderSide(color: Color(0xFF171A2A), width: 0.5),
+            child: _filteredChannels.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.search_off_rounded, color: Color(0xFF555D77), size: 40),
+                          const SizedBox(height: 12),
+                          Text(
+                            _searchQuery.isNotEmpty
+                                ? 'No items matching "$_searchQuery"'
+                                : 'No channels available in "$_selectedCategory"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFF8F98B6),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          child: Text(
-                            '${channel.number ?? index + 1}',
-                            style: TextStyle(
-                              color: isSelected || isFocused ? Colors.white : const Color(0xFF555D77),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          width: 26,
-                          height: 26,
+                  )
+                : ListView.builder(
+                    controller: _channelScrollController,
+                    itemCount: _filteredChannels.length,
+                    itemBuilder: (context, index) {
+                      final channel = _filteredChannels[index];
+                      final isSelected = _selectedChannel?.name == channel.name;
+                      final isFocused = _currentZone == NavigationZone.channels && index == _focusedChannelIndex;
+
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _currentZone = NavigationZone.channels;
+                            _focusedChannelIndex = index;
+                            _selectedChannel = channel;
+                            PreferencesService.setLastFocusedChannel(_selectedCategory, channel.name);
+                            _initPlayerForChannel(channel);
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 100),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE85817),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${channel.number ?? index + 1}',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.black),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                channel.name,
-                                style: TextStyle(
-                                  color: isSelected || isFocused ? Colors.white : const Color(0xFFCFD3E3),
-                                  fontSize: 12,
-                                  fontWeight: isSelected || isFocused ? FontWeight.semibold : FontWeight.normal,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            color: isFocused
+                                ? const Color(0xFF232747)
+                                : isSelected
+                                    ? const Color(0xFF1F233F)
+                                    : Colors.transparent,
+                            border: Border(
+                              left: BorderSide(
+                                color: isFocused
+                                    ? const Color(0xFF00E5FF)
+                                    : isSelected
+                                        ? const Color(0xFF5B68DF)
+                                        : Colors.transparent,
+                                width: isFocused ? 3 : 2,
                               ),
-                              Text(
-                                channel.group ?? 'Chile',
-                                style: const TextStyle(color: Color(0xFF555D77), fontSize: 10, fontWeight: FontWeight.bold),
+                              bottom: const BorderSide(color: Color(0xFF171A2A), width: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 24,
+                                child: Text(
+                                  '${channel.number ?? index + 1}',
+                                  style: TextStyle(
+                                    color: isSelected || isFocused ? Colors.white : const Color(0xFF555D77),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                width: 26,
+                                height: 26,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE85817),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${channel.number ?? index + 1}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      channel.name,
+                                      style: TextStyle(
+                                        color: isSelected || isFocused ? Colors.white : const Color(0xFFCFD3E3),
+                                        fontSize: 12,
+                                        fontWeight: isSelected || isFocused ? FontWeight.w600 : FontWeight.normal,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      channel.group ?? 'General',
+                                      style: const TextStyle(color: Color(0xFF555D77), fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchTargetOption(SearchTarget target, String label) {
+    final isSelected = _searchTarget == target;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _searchTarget = target;
+          _filterData();
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF00E5FF) : const Color(0xFF555D77),
+                  width: 1.5,
+                ),
+                color: isSelected ? const Color(0xFF00E5FF) : Colors.transparent,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFF737C98),
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -811,10 +1066,10 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                       children: [
                         Text(
                           _selectedChannel?.name ?? 'Canal 13',
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.semibold),
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                         ),
                         Text(
-                          (_selectedChannel?.group ?? 'Chile').toUpperCase(),
+                          (_selectedChannel?.group ?? 'General').toUpperCase(),
                           style: const TextStyle(color: Color(0xFF69728F), fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -871,8 +1126,8 @@ class _LiveTVScreenState extends State<LiveTVScreen> {
                           children: [
                             _buildControlButton(
                               target: PlayerControlTarget.playPause,
-                              icon: Icons.pause,
-                              onTap: () => _player?.playOrPause(),
+                              icon: _isPlaying ? Icons.pause : Icons.play_arrow,
+                              onTap: _togglePlayPause,
                             ),
                             const SizedBox(width: 12),
                             Container(
