@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use md5::Digest;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONNECTION, COOKIE, REFERER, USER_AGENT};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -202,14 +203,29 @@ impl StalkerEngine {
                 .unwrap_or_else(|_| HeaderValue::from_static("http://localhost/c/")),
         );
 
+        // Compute Advanced Cryptographic hashes (adid, sncut, devenc, signature)
+        let bytes = self.config.mac_address.as_bytes();
+        let mut adid_hasher = sha1::Sha1::new();
+        adid_hasher.update(bytes);
+        let adid = format!("{:x}", adid_hasher.finalize());
+
+        let mut md5_hasher = md5::Md5::new();
+        md5_hasher.update(bytes);
+        let sn_hex = format!("{:X}", md5_hasher.finalize());
+        let sncut = if sn_hex.len() >= 13 { &sn_hex[..13] } else { &sn_hex };
+
+        let mut dev_hasher = sha2::Sha256::new();
+        dev_hasher.update(bytes);
+        let devenc = format!("{:X}", dev_hasher.finalize());
+
         let cookie_str = match token_opt {
             Some(tok) => format!(
-                "mac={}; stb_lang={}; timezone={}; token={}",
-                self.config.mac_address, DEFAULT_LANG, DEFAULT_TIMEZONE, tok
+                "mac={}; stb_lang={}; timezone={}; token={}; adid={}; debug=1; device_id2={}; device_id={}; hw_version=1.7-BD-00; sn={}",
+                self.config.mac_address, DEFAULT_LANG, DEFAULT_TIMEZONE, tok, adid, devenc, devenc, sncut
             ),
             None => format!(
-                "mac={}; stb_lang={}; timezone={}",
-                self.config.mac_address, DEFAULT_LANG, DEFAULT_TIMEZONE
+                "mac={}; stb_lang={}; timezone={}; adid={}; debug=1; device_id2={}; device_id={}; hw_version=1.7-BD-00; sn={}",
+                self.config.mac_address, DEFAULT_LANG, DEFAULT_TIMEZONE, adid, devenc, devenc, sncut
             ),
         };
 

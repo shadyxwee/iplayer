@@ -455,51 +455,131 @@ class StalkerService {
     return c.trim();
   }
 
-  /// Helper to fetch all items with pagination support (p=0, p=1, ...)
-  Future<List<Map<String, dynamic>>> fetchAllPaginated(String mediaType, {int maxPages = 50}) async {
+  /// Helper to fetch all items with fast concurrent pagination support
+  /// Phase 5 Algorithm: Requests page 0, calculates total_pages, and fetches concurrent worker batches (pool size: 3-5)
+  Future<List<Map<String, dynamic>>> fetchAllPaginated(
+    String mediaType, {
+    void Function(String msg, int count)? onProgress,
+    int maxPages = 100,
+  }) async {
     final allItems = <Map<String, dynamic>>[];
-    for (int p = 0; p < maxPages; p++) {
-      final res = await request({
-        'type': mediaType,
-        'action': 'get_ordered_list',
-        'p': p.toString(),
-      });
+    final seenIds = <String>{};
 
-      List items = [];
-      if (res is Map && res['data'] is List) {
-        items = res['data'] as List;
-      } else if (res is List) {
-        items = res;
+    // 1. Fetch initial page (p=0)
+    final res0 = await request({
+      'type': mediaType,
+      'action': 'get_ordered_list',
+      'p': '0',
+    });
+
+    List page0Items = [];
+    int totalItems = 0;
+    int itemsPerPage = 14;
+
+    if (res0 is Map) {
+      if (res0['data'] is List) {
+        page0Items = res0['data'] as List;
       }
-
-      if (items.isEmpty) {
-        break;
+      if (res0['total_items'] != null) {
+        totalItems = int.tryParse(res0['total_items'].toString()) ?? 0;
       }
+      if (res0['max_page_items'] != null) {
+        itemsPerPage = int.tryParse(res0['max_page_items'].toString()) ?? 14;
+      }
+    } else if (res0 is List) {
+      page0Items = res0;
+    }
 
-      for (var item in items) {
-        if (item is Map) {
+    for (var item in page0Items) {
+      if (item is Map) {
+        final id = item['id']?.toString() ?? '';
+        if (id.isEmpty || seenIds.add(id)) {
           allItems.add(Map<String, dynamic>.from(item));
         }
       }
+    }
 
-      // If page had fewer items or total_items reached, stop
-      if (res is Map && res['total_items'] != null) {
-        final total = int.tryParse(res['total_items'].toString()) ?? 0;
-        if (allItems.length >= total && total > 0) {
-          break;
+    if (onProgress != null) {
+      onProgress('Page 1 loaded (${allItems.length} items)', allItems.length);
+    }
+
+    if (allItems.isEmpty) {
+      return allItems;
+    }
+
+    // 2. Calculate remaining pages
+    if (itemsPerPage <= 0) itemsPerPage = allItems.isNotEmpty ? allItems.length : 14;
+    int totalPages = totalItems > 0 ? ((totalItems + itemsPerPage - 1) ~/ itemsPerPage) : 1;
+    if (totalPages > maxPages) totalPages = maxPages;
+
+    if (totalPages <= 1) {
+      return allItems;
+    }
+
+    // 3. Concurrently fetch remaining pages in worker pools of 4 concurrent requests
+    const int poolSize = 4;
+    final remainingPages = [for (int p = 1; p < totalPages; p++) p];
+
+    for (int i = 0; i < remainingPages.length; i += poolSize) {
+      final batch = remainingPages.sublist(i, (i + poolSize).clamp(0, remainingPages.length));
+      final futures = batch.map((p) async {
+        try {
+          final res = await request({
+            'type': mediaType,
+            'action': 'get_ordered_list',
+            'p': p.toString(),
+          });
+          List items = [];
+          if (res is Map && res['data'] is List) {
+            items = res['data'] as List;
+          } else if (res is List) {
+            items = res;
+          }
+          return items;
+        } catch (_) {
+          return [];
+        }
+      });
+
+      final results = await Future.wait(futures);
+      int addedInBatch = 0;
+      for (final items in results) {
+        for (var item in items) {
+          if (item is Map) {
+            final id = item['id']?.toString() ?? '';
+            if (id.isEmpty || seenIds.add(id)) {
+              allItems.add(Map<String, dynamic>.from(item));
+              addedInBatch++;
+            }
+          }
         }
       }
+
+      if (onProgress != null) {
+        final currentPage = batch.last + 1;
+        onProgress('Pages up to $currentPage/$totalPages loaded (${allItems.length} items)', allItems.length);
+      }
+
+      // Early stop if no items were added in this entire batch
+      if (addedInBatch == 0 && i > 0) {
+        break;
+      }
+      if (totalItems > 0 && allItems.length >= totalItems) {
+        break;
+      }
     }
+
     return allItems;
   }
 
-  /// Get Live Channels
-  Future<Map<String, dynamic>> getLiveChannels() async {
+  /// Get Live Channels with real-time progress reporting
+  Future<Map<String, dynamic>> getLiveChannels({void Function(String msg, int count)? onProgress}) async {
     try {
+      if (onProgress != null) onProgress('Loading Live TV categories...', 0);
       final categories = await getLiveCategories();
       final channels = <Channel>[];
 
-      final items = await fetchAllPaginated('itv');
+      final items = await fetchAllPaginated('itv', onProgress: onProgress);
 
       for (var item in items) {
         final ch = Channel();
@@ -535,13 +615,14 @@ class StalkerService {
     }
   }
 
-  /// Get Movies (VOD)
-  Future<Map<String, dynamic>> getMovies() async {
+  /// Get Movies (VOD) with real-time progress reporting
+  Future<Map<String, dynamic>> getMovies({void Function(String msg, int count)? onProgress}) async {
     try {
+      if (onProgress != null) onProgress('Loading Movies / VOD categories...', 0);
       final categories = await getVodCategories();
       final movies = <VodItem>[];
 
-      final items = await fetchAllPaginated('vod');
+      final items = await fetchAllPaginated('vod', onProgress: onProgress);
 
       for (var item in items) {
         final streamId = int.tryParse(item['id']?.toString() ?? '0') ?? 0;
@@ -578,13 +659,14 @@ class StalkerService {
     }
   }
 
-  /// Get Series
-  Future<Map<String, dynamic>> getSeries() async {
+  /// Get Series with real-time progress reporting
+  Future<Map<String, dynamic>> getSeries({void Function(String msg, int count)? onProgress}) async {
     try {
+      if (onProgress != null) onProgress('Loading Series categories...', 0);
       final categories = await getSeriesCategories();
       final seriesList = <SeriesItem>[];
 
-      final items = await fetchAllPaginated('series');
+      final items = await fetchAllPaginated('series', onProgress: onProgress);
 
       for (var item in items) {
         final id = item['id']?.toString() ?? '';

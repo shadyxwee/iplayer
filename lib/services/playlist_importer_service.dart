@@ -121,27 +121,35 @@ class PlaylistImporterService {
 
       if (playlist.isStalker) {
         statusNotifier.value = 'Connecting to Stalker MAC Portal...';
-        subStatusNotifier.value = 'Handshaking with portal server...';
+        subStatusNotifier.value = 'Probing endpoints with STB signatures...';
 
         final service = StalkerService(
           portalUrl: playlist.url,
           macAddress: playlist.macAddress ?? '00:1A:79:00:00:00',
-          serialNumber: playlist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
-          deviceId: playlist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
-          deviceId2: playlist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
-          signature: playlist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
+          serialNumber: playlist.serialNumber,
+          deviceId: playlist.deviceId,
+          deviceId2: playlist.deviceId2,
+          signature: playlist.signature,
         );
 
         statusNotifier.value = 'Fetching Live TV Channels...';
-        final liveResult = await service.getLiveChannels();
+        final liveResult = await service.getLiveChannels(
+          onProgress: (msg, count) {
+            subStatusNotifier.value = '[Live TV] $msg';
+          },
+        );
         if (liveResult['success'] == true) {
           final liveCh = liveResult['channels'] as List<Channel>;
           channels.addAll(liveCh);
-          subStatusNotifier.value = 'Loaded ${liveCh.length} live channels';
+          subStatusNotifier.value = 'Live TV: ${liveCh.length} channels ready';
         }
 
         statusNotifier.value = 'Fetching Movies / VOD Catalog...';
-        final moviesResult = await service.getMovies();
+        final moviesResult = await service.getMovies(
+          onProgress: (msg, count) {
+            subStatusNotifier.value = '[VOD] $msg';
+          },
+        );
         if (moviesResult['success'] == true) {
           final movies = moviesResult['movies'] as List;
           for (var movie in movies) {
@@ -157,11 +165,15 @@ class PlaylistImporterService {
               ..contentType = ContentType.movie;
             channels.add(channel);
           }
-          subStatusNotifier.value = 'Loaded ${movies.length} movies';
+          subStatusNotifier.value = 'Movies / VOD: ${movies.length} titles ready';
         }
 
         statusNotifier.value = 'Fetching TV Series Catalog...';
-        final seriesResult = await service.getSeries();
+        final seriesResult = await service.getSeries(
+          onProgress: (msg, count) {
+            subStatusNotifier.value = '[Series] $msg';
+          },
+        );
         if (seriesResult['success'] == true) {
           final seriesList = seriesResult['series'] as List;
           for (var series in seriesList) {
@@ -177,7 +189,7 @@ class PlaylistImporterService {
               ..contentType = ContentType.series;
             channels.add(channel);
           }
-          subStatusNotifier.value = 'Loaded ${seriesList.length} series';
+          subStatusNotifier.value = 'Series: ${seriesList.length} shows ready';
         }
       } else if (playlist.isXtreamCodes) {
         statusNotifier.value = 'Connecting to Xtream Codes API...';
