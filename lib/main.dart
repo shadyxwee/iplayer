@@ -5,20 +5,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'services/database_service.dart';
 import 'services/image_cache_service.dart';
 import 'services/config_service.dart';
-import 'services/m3u_parser.dart';
 import 'services/xtream_service.dart';
 import 'services/preferences_service.dart';
 import 'services/language_service.dart';
 import 'providers/content_provider.dart';
 import 'providers/theme_provider.dart';
 import 'models/playlist.dart';
-import 'screens/dashboard_screen.dart';
-import 'screens/mobile_dashboard_screen.dart';
-import 'widgets/welcome_dialog.dart';
+import 'screens/vortextube_screen.dart';
 import 'l10n/app_localizations.dart';
 
 void main() async {
@@ -147,7 +143,7 @@ class _MyAppState extends State<MyApp> {
           child: Consumer<LanguageService>(
             builder: (context, languageService, child) {
               return MaterialApp(
-                title: 'RIPTV',
+                title: 'VortexTube',
                 debugShowCheckedModeBanner: false,
                 locale: languageService.currentLocale,
                 localizationsDelegates: const [
@@ -161,7 +157,7 @@ class _MyAppState extends State<MyApp> {
                 darkTheme: ThemeData(
                   useMaterial3: true,
                   brightness: Brightness.dark,
-                  scaffoldBackgroundColor: const Color(0xFF0A0A0A),
+                  scaffoldBackgroundColor: const Color(0xFF0F0F0F),
                 ),
                 builder: (context, child) {
                   final isDesktop = !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
@@ -169,8 +165,6 @@ class _MyAppState extends State<MyApp> {
 
                   return Column(
                     children: [
-                      // Minimalist Dark Title Bar: Dark background (#0F0F0F), no app icon, no app name,
-                      // and functional window controls (minimize, maximize/restore, close) on the right
                       const SizedBox(
                         height: 32,
                         child: WindowCaption(
@@ -182,198 +176,12 @@ class _MyAppState extends State<MyApp> {
                     ],
                   );
                 },
-                home: const SplashScreen(),
+                home: const VortexTubeScreen(),
               );
             },
           ),
         );
       },
-    );
-  }
-}
-
-// ====================== PROFESSIONAL SPLASH SCREEN ======================
-
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
-
-  @override
-  State<SplashScreen> createState() => _SplashScreenState();
-}
-
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  static const String _firstLaunchKey = 'first_launch';
-
-  late AnimationController _controller;
-  late Animation<double> _iconFade;
-  late Animation<double> _iconScale;
-  late Animation<double> _textFade;
-  late Animation<double> _textSlide;
-  late Animation<double> _loadingFade;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 2600),
-      vsync: this,
-    );
-
-    _iconFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.5)),
-    );
-
-    _iconScale = Tween<double>(begin: 0.7, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack)),
-    );
-
-    _textFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.4, 0.8)),
-    );
-
-    _textSlide = Tween<double>(begin: 20, end: 0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.4, 0.8, curve: Curves.easeOutCubic)),
-    );
-
-    _loadingFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.7, 1.0)),
-    );
-
-    _controller.forward();
-    _navigateAfterDelay();
-  }
-
-  Future<void> _navigateAfterDelay() async {
-    await Future.delayed(const Duration(milliseconds: 2800));
-
-    if (mounted) {
-      final prefs = await SharedPreferences.getInstance();
-      final isFirstLaunch = prefs.getBool(_firstLaunchKey) ?? true;
-
-      final bool isAndroid = !kIsWeb && Platform.isAndroid;
-
-      await Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => isAndroid
-              ? MobileDashboardScreen(showWelcomeDialog: isFirstLaunch)
-              : DashboardScreen(showWelcomeDialog: isFirstLaunch),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Logo / Icon
-            FadeTransition(
-              opacity: _iconFade,
-              child: ScaleTransition(
-                scale: _iconScale,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.05),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blue.withOpacity(0.3),
-                        blurRadius: 40,
-                        spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.tv_rounded,
-                    size: 110,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 50),
-
-            // Title & Subtitle
-            FadeTransition(
-              opacity: _textFade,
-              child: SlideTransition(
-                position: _textSlide.drive(Tween<Offset>(
-                  begin: const Offset(0, 0.3),
-                  end: Offset.zero,
-                )),
-                child: Column(
-                  children: [
-                    const Text(
-                      'RIPTV',
-                      style: TextStyle(
-                        fontSize: 52,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: 4,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Premium IPTV Experience',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withOpacity(0.75),
-                        letterSpacing: 2.5,
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 90),
-
-            // Elegant Loading
-            FadeTransition(
-              opacity: _loadingFade,
-              child: Column(
-                children: [
-                  const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    AppLocalizations.of(context).loading,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.6),
-                      letterSpacing: 3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

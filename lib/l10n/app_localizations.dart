@@ -26,7 +26,7 @@ class AppLocalizations {
   static final Map<String, Map<String, String>> _localizedValues = {
     'es_ES': {
       // General
-      'app_name': 'RIPTV',
+      'app_name': 'VortexTube',
       'loading': 'Cargando...',
       'error': 'Error',
       'ok': 'Aceptar',
@@ -330,7 +330,7 @@ class AppLocalizations {
     },
     'en_US': {
       // General
-      'app_name': 'RIPTV',
+      'app_name': 'VortexTube',
       'loading': 'Loading...',
       'error': 'Error',
       'ok': 'OK',
@@ -669,7 +669,7 @@ class AppLocalizations {
     },
     'zh_CN': {
       // General
-      'app_name': 'RIPTV',
+      'app_name': 'VortexTube',
       'loading': '加载中...',
       'error': '错误',
       'ok': '确定',
@@ -848,7 +848,7 @@ class AppLocalizations {
     },
     'ru_RU': {
       // General
-      'app_name': 'RIPTV',
+      'app_name': 'VortexTube',
       'loading': 'Загрузка...',
       'error': 'Ошибка',
       'ok': 'OK',

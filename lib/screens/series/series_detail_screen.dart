@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/series.dart';
-import '../models/series_item.dart';
-import '../models/media_metadata.dart';
-import '../models/channel.dart';
-import '../models/playlist.dart';
-import '../services/metadata_service.dart';
-import '../services/database_service.dart';
-import '../services/stalker_service.dart';
-import '../services/xtream_service.dart';
-import 'video_player_screen.dart';
-import 'mobile_video_player_screen.dart';
+import '../../models/series.dart';
+import '../../models/series_item.dart';
+import '../../models/media_metadata.dart';
+import '../../models/channel.dart';
+import '../../models/playlist.dart';
+import '../../services/metadata_service.dart';
+import '../../services/database_service.dart';
+import '../../services/stalker_service.dart';
+import '../../services/xtream_service.dart';
+import '../player/video_player_screen.dart';
+import '../player/mobile_video_player_screen.dart';
 import 'dart:io' show Platform;
 
 class SeriesDetailScreen extends StatefulWidget {

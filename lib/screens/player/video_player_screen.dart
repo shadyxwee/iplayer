@@ -6,9 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
-import '../models/channel.dart';
-import '../services/database_service.dart';
-import '../l10n/app_localizations.dart';
+import '../../models/channel.dart';
+import '../../services/database_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
   final Channel channel;
