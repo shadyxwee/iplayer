@@ -90,9 +90,9 @@ class PlaylistImporterService {
 
     try {
       String? originalM3uUrl;
-      // Auto-detect and convert Xtream get.php M3U URLs to full Xtream Codes API
+      // Auto-detect and convert Xtream get.php or player_api.php or enigma2.php M3U URLs
       if (playlist.sourceType == PlaylistSourceType.m3u &&
-          playlist.url.contains('get.php') &&
+          (playlist.url.contains('get.php') || playlist.url.contains('player_api.php') || playlist.url.contains('enigma2.php')) &&
           playlist.url.contains('username=') &&
           playlist.url.contains('password=')) {
         originalM3uUrl = playlist.url;
@@ -101,9 +101,12 @@ class PlaylistImporterService {
           final user = uri.queryParameters['username'];
           final pass = uri.queryParameters['password'];
           if (user != null && pass != null) {
-            playlist.sourceType = PlaylistSourceType.xtreamCodes;
+            final isEnigma = playlist.url.contains('enigma2.php');
+            if (!isEnigma) {
+              playlist.sourceType = PlaylistSourceType.xtreamCodes;
+            }
             final pathSegments = List<String>.from(uri.pathSegments);
-            if (pathSegments.isNotEmpty && pathSegments.last == 'get.php') {
+            if (pathSegments.isNotEmpty && (pathSegments.last == 'get.php' || pathSegments.last == 'player_api.php')) {
               pathSegments.removeLast();
             }
             final basePath = pathSegments.isEmpty ? '' : '/${pathSegments.join('/')}';
@@ -236,14 +239,25 @@ class PlaylistImporterService {
         // Fallback: If player_api.php returned zero content, try fetching via m3u_plus URL
         if (channels.isEmpty) {
           statusNotifier.value = 'Falling back to M3U_Plus Stream Ingestion...';
-          subStatusNotifier.value = 'Downloading playlist streams...';
+          subStatusNotifier.value = 'Downloading playlist streams with STB headers...';
           final m3uFallbackUrl = originalM3uUrl ??
               '${playlist.url}/get.php?username=${playlist.username}&password=${playlist.password}&type=m3u_plus&output=ts';
-          final fallbackChannels = await M3UParser.parseFromUrl(m3uFallbackUrl);
-          if (fallbackChannels.isNotEmpty) {
-            channels.addAll(fallbackChannels);
-          }
+          try {
+            final fallbackChannels = await M3UParser.parseFromUrl(m3uFallbackUrl);
+            if (fallbackChannels.isNotEmpty) {
+              channels.addAll(fallbackChannels);
+            }
+          } catch (_) {}
         }
+      } else if (playlist.url.contains('enigma2.php')) {
+        statusNotifier.value = 'Connecting to Enigma2 OpenWebif...';
+        subStatusNotifier.value = 'Parsing XML stream channels...';
+        final enigmaChannels = await XtreamService.parseEnigma2(
+          enigma2Url: playlist.url,
+          username: playlist.username ?? '',
+          password: playlist.password ?? '',
+        );
+        channels.addAll(enigmaChannels);
       } else {
         statusNotifier.value = 'Downloading M3U Playlist...';
         subStatusNotifier.value = 'Parsing stream entries and logos...';

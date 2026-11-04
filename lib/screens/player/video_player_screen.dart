@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../models/channel.dart';
 import '../../services/database_service.dart';
 import '../../services/stalker_service.dart';
+import '../../services/xtream_service.dart';
 import '../../l10n/app_localizations.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
@@ -147,7 +148,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
       String playbackUrl = widget.channel.url;
 
-      // Dynamic stream resolution for Stalker / Ministra channels
+      // Dynamic stream resolution for Stalker / Ministra channels or VOD redirects
       if (playbackUrl.contains('/ch/') && playbackUrl.endsWith('_')) {
         try {
           final playlist = await DatabaseService.getPlaylistById(widget.channel.playlistId ?? 0);
@@ -163,6 +164,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             await stalker.handshake();
             playbackUrl = await stalker.createStreamLink(playbackUrl, type: 'itv');
           }
+        } catch (_) {}
+      } else if (widget.channel.contentType == ContentType.movie &&
+          (playbackUrl.contains('/movie/') || playbackUrl.contains('token='))) {
+        // Resolve VOD load-balancer redirection and IP tokens
+        try {
+          playbackUrl = await XtreamService.resolveVodUrl(playbackUrl);
         } catch (_) {}
       }
 
