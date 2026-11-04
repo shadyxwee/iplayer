@@ -546,14 +546,15 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   }
 
   void _focusSidebar() {
-    _currentZone = VortexZone.sidebar;
-    _isSidebarExpanded = true;
-    final activeIndex = _navItems.indexWhere((item) => item['target'] == _activeNav);
-    if (activeIndex != -1) {
-      _focusedNavIndex = activeIndex;
-    }
-    final nav = _navItems[_focusedNavIndex]['target'] as VortexNavTarget;
-    _selectNavTarget(nav);
+    setState(() {
+      _currentZone = VortexZone.sidebar;
+      _isSidebarExpanded = true;
+      final activeIndex = _navItems.indexWhere((item) => item['target'] == _activeNav);
+      if (activeIndex != -1) {
+        _focusedNavIndex = activeIndex;
+      }
+    });
+    _screenFocusNode.requestFocus();
   }
 
   void _moveLeft() {
@@ -608,6 +609,9 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
           _currentZone = VortexZone.content;
           if (!_isSidebarHovered) {
             _isSidebarExpanded = false;
+          }
+          if (_activeNav == VortexNavTarget.settings) {
+            break;
           }
           _focusedGridIndex = _lastFocusedGridIndex.clamp(0, (_filteredScopedItems.length - 1).clamp(0, 999999));
           _ensureVisibleGridItem(_focusedGridIndex);
@@ -750,9 +754,13 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   void _selectNavTarget(VortexNavTarget target) {
     if (target == VortexNavTarget.settings) {
       _clearSearchState();
+      final settingsIdx = _navItems.indexWhere((item) => item['target'] == VortexNavTarget.settings);
       setState(() {
         _activeNav = target;
-        _currentZone = VortexZone.content;
+        if (settingsIdx != -1) {
+          _focusedNavIndex = settingsIdx;
+        }
+        // Retain sidebar zone when navigating through sidebar
         _isLoading = false;
       });
       return;
@@ -779,9 +787,12 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     });
 
     _navDebounceTimer?.cancel();
-    _navDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+    _navDebounceTimer = Timer(const Duration(milliseconds: 50), () async {
       if (mounted) {
-        _loadActiveViewContent();
+        // Ensure favoriteCategories is freshly loaded from PreferencesService
+        final favCats = await PreferencesService.getFavoriteCategories();
+        _favoriteCategories = favCats.toSet();
+        await _loadActiveViewContent();
       }
     });
   }
@@ -994,6 +1005,17 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                               setState(() => _searchQuery = '');
                               _loadActiveViewContent();
                             },
+                            onRefreshPressed: () {
+                              _cachedAllChannels = null;
+                              VortexTubeService.invalidateCache();
+                              _loadInitialData();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Feed refreshed!'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+                            },
                             onCycleSort: _cycleSortOption,
                           ),
                           _buildTopFilterBar(),
@@ -1019,6 +1041,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     switch (_activeNav) {
       case VortexNavTarget.settings:
         return VortexSettingsView(
+          isContentZoneActive: _currentZone == VortexZone.content,
           onBackToSidebar: _focusSidebar,
           onDataChanged: () async {
             _cachedAllChannels = null;

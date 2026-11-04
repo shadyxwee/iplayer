@@ -16,6 +16,7 @@ class VortexSearchBar extends StatelessWidget {
   final VoidCallback onClearSearch;
   final VoidCallback onCycleSort;
   final VoidCallback? onLeftArrowPressed;
+  final VoidCallback? onRefreshPressed;
 
   const VortexSearchBar({
     super.key,
@@ -32,6 +33,7 @@ class VortexSearchBar extends StatelessWidget {
     required this.onClearSearch,
     required this.onCycleSort,
     this.onLeftArrowPressed,
+    this.onRefreshPressed,
   });
 
   String _getSortLabel() {
@@ -138,6 +140,31 @@ class VortexSearchBar extends StatelessWidget {
                     ),
                   ),
               ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Refresh Icon Button next to search capsule
+          Tooltip(
+            message: 'Refresh Feed & Clear Cache',
+            child: InkWell(
+              onTap: onRefreshPressed,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A2A).withValues(alpha: 0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF383838)),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.refresh_rounded,
+                    color: Color(0xFFDDDDDD),
+                    size: 19,
+                  ),
+                ),
+              ),
             ),
           ),
           const Spacer(),

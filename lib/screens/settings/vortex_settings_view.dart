@@ -22,11 +22,13 @@ enum VortexSettingsCategoryGroup {
 }
 
 class VortexSettingsView extends StatefulWidget {
+  final bool isContentZoneActive;
   final VoidCallback onBackToSidebar;
   final VoidCallback onDataChanged;
 
   const VortexSettingsView({
     super.key,
+    this.isContentZoneActive = true,
     required this.onBackToSidebar,
     required this.onDataChanged,
   });
@@ -52,6 +54,10 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
   Map<String, int> _movieCategories = {};
   Map<String, int> _seriesCategories = {};
   bool _isLoading = true;
+
+  // Category Search in Add to VortexTube
+  final TextEditingController _categorySearchController = TextEditingController();
+  String _categorySearchQuery = '';
 
   // Add / Edit Portal Form State
   Playlist? _editingPlaylist;
@@ -95,12 +101,26 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
   void initState() {
     super.initState();
     _loadSettingsData();
+    if (widget.isContentZoneActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _settingsFocusNode.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(VortexSettingsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isContentZoneActive && !oldWidget.isContentZoneActive) {
+      _settingsFocusNode.requestFocus();
+    }
   }
 
   @override
   void dispose() {
     _rightScrollController.dispose();
     _settingsFocusNode.dispose();
+    _categorySearchController.dispose();
     _playlistNameController.dispose();
     _serverUrlController.dispose();
     _usernameController.dispose();
@@ -174,6 +194,7 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
       });
     }
     VortexTubeService.invalidateCache();
+    widget.onDataChanged();
   }
 
   Future<void> _resetAllFavoriteCategories() async {
@@ -187,6 +208,7 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
       });
     }
     VortexTubeService.invalidateCache();
+    widget.onDataChanged();
   }
 
   Future<void> _setActivePlaylist(Playlist playlist) async {
@@ -692,16 +714,20 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
         break;
     }
 
-    final sortedCatEntries = activeCats.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    var entries = activeCats.entries.toList();
+    if (_categorySearchQuery.trim().isNotEmpty) {
+      final q = _categorySearchQuery.trim().toLowerCase();
+      entries = entries.where((e) => e.key.toLowerCase().contains(q)).toList();
+    }
+    final sortedCatEntries = entries..sort((a, b) => b.value.compareTo(a.value));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Column(
+          children: [
+            const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -714,6 +740,51 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                   style: TextStyle(color: Color(0xFF828290), fontSize: 12),
                 ),
               ],
+            ),
+            // Category Search Box
+            Container(
+              width: 260,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFF181820),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF2C2C3A)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.search_rounded, color: Color(0xFF888894), size: 17),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _categorySearchController,
+                      style: const TextStyle(color: Colors.white, fontSize: 12.5),
+                      decoration: const InputDecoration(
+                        hintText: 'Search category...',
+                        hintStyle: TextStyle(color: Color(0xFF666672), fontSize: 12),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      onChanged: (val) {
+                        setState(() {
+                          _categorySearchQuery = val;
+                        });
+                      },
+                    ),
+                  ),
+                  if (_categorySearchQuery.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        _categorySearchController.clear();
+                        setState(() {
+                          _categorySearchQuery = '';
+                        });
+                      },
+                      child: const Icon(Icons.clear, color: Color(0xFF888894), size: 16),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -750,9 +821,9 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                 letterSpacing: 1.0,
               ),
             ),
-            const Text(
-              'Press OK to pin/unpin shelf',
-              style: TextStyle(color: Color(0xFF888894), fontSize: 11),
+            Text(
+              '${sortedCatEntries.length} categories found • Press OK to pin/unpin shelf',
+              style: const TextStyle(color: Color(0xFF888894), fontSize: 11),
             ),
           ],
         ),
