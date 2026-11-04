@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/database_service.dart';
+import 'services/image_cache_service.dart';
 import 'services/config_service.dart';
 import 'services/m3u_parser.dart';
 import 'services/xtream_service.dart';
@@ -32,6 +33,9 @@ void main() async {
 
     await DatabaseService.initialize();
     print('Database initialized');
+
+    await ImageCacheService.initialize();
+    print('ImageCacheService initialized');
 
     if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       await windowManager.ensureInitialized();

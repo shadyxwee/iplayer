@@ -7,6 +7,7 @@ import '../services/series_parser.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/smooth_page_route.dart';
 import 'series_detail_screen.dart';
+import '../services/image_cache_service.dart';
 
 class SeriesGridScreen extends StatefulWidget {
   const SeriesGridScreen({super.key});
@@ -27,12 +28,15 @@ class _SeriesGridScreenState extends State<SeriesGridScreen> {
   String _sortBy = 'added';
   Series? _featuredSeries;
   bool _isLoading = true;
+  int _displayedCount = 20;
+  static const int _pageSize = 20;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadSeries();
   }
 
@@ -43,6 +47,19 @@ class _SeriesGridScreenState extends State<SeriesGridScreen> {
     super.dispose();
   }
 
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (maxScroll > 0 && currentScroll >= maxScroll * 0.8) {
+      if (_displayedCount < _filteredSeries.length) {
+        setState(() {
+          _displayedCount = (_displayedCount + _pageSize).clamp(0, _filteredSeries.length);
+        });
+      }
+    }
+  }
   Future<void> _loadSeries() async {
     final allChannels = await DatabaseService.getAllChannels();
     final seriesChannels = allChannels
@@ -152,6 +169,7 @@ class _SeriesGridScreenState extends State<SeriesGridScreen> {
 
     setState(() {
       _filteredSeries = filtered;
+      _displayedCount = 20;
     });
   }
 
@@ -587,17 +605,43 @@ class _SeriesGridScreenState extends State<SeriesGridScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
+                    AspectRatio(
+                      aspectRatio: 2 / 3,
                       child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                        child: series.poster != null && series.poster!.isNotEmpty
-                            ? Image.network(
-                                series.poster!,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.tv, color: Color(0xFF8F92A9), size: 40)),
-                              )
-                            : const Center(child: Icon(Icons.tv, color: Color(0xFF8F92A9), size: 40)),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                        child: Container(
+                          color: const Color(0xFF141324),
+                          child: (series.cover != null && series.cover!.isNotEmpty)
+                              ? Image(
+                                  image: ImageCacheService.getCachedImageProvider(series.cover!),
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      color: const Color(0xFF18172C),
+                                      child: const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Color(0xFF6366F1),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (_, __, ___) => const Center(
+                                    child: Icon(Icons.tv, color: Color(0xFF8F92A9), size: 36),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(Icons.tv, color: Color(0xFF8F92A9), size: 36),
+                                ),
+                        ),
                       ),
                     ),
                     Padding(
@@ -664,6 +708,7 @@ class _SeriesGridScreenState extends State<SeriesGridScreen> {
       context,
       SmoothPageRoute(child: SeriesDetailScreen(series: series)),
     );
+    _scrollController.addListener(_onScroll);
     _loadSeries();
   }
 }
