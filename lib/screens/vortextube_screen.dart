@@ -19,7 +19,7 @@ import 'player/video_player_screen.dart';
 import 'search/vortex_search_bar.dart';
 import 'series/series_detail_screen.dart';
 import 'series/vortex_series_view.dart';
-import 'settings/settings_screen.dart';
+import 'settings/vortex_settings_view.dart';
 import 'sidebar/vortex_nav_types.dart';
 import 'sidebar/vortex_sidebar.dart';
 
@@ -43,6 +43,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   bool _isSidebarHovered = false;
   Timer? _sidebarCollapseTimer;
   Timer? _navDebounceTimer;
+  Timer? _searchDebounceTimer;
+
+  // Cached full channel list to avoid frequent DB reads
+  List<Channel>? _cachedAllChannels;
 
   // Feed & Scoped Content Data
   List<VortexShelf> _shelves = [];
@@ -96,6 +100,7 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   void dispose() {
     _sidebarCollapseTimer?.cancel();
     _navDebounceTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _mainScrollController.dispose();
     _screenFocusNode.dispose();
     _searchFocusNode.dispose();
@@ -148,12 +153,24 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
     final favCats = await PreferencesService.getFavoriteCategories();
     _favoriteCategories = favCats.toSet();
 
+    _cachedAllChannels = await DatabaseService.getAllChannels();
+
     await _loadActiveViewContent();
   }
 
   Future<void> _loadActiveViewContent() async {
+    if (_activeNav == VortexNavTarget.settings) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      return;
+    }
+
     if (_activeNav == VortexNavTarget.home) {
-      final shelves = await VortexTubeService.getPersonalizedFeed(searchQuery: _searchQuery);
+      final shelves = await VortexTubeService.getPersonalizedFeed(
+        searchQuery: _searchQuery,
+        preloadedChannels: _cachedAllChannels,
+      );
       if (mounted) {
         setState(() {
           _shelves = shelves;
@@ -163,7 +180,8 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         });
       }
     } else {
-      final allChannels = await DatabaseService.getAllChannels();
+      _cachedAllChannels ??= await DatabaseService.getAllChannels();
+      final allChannels = _cachedAllChannels!;
       final lovedCategories = _favoriteCategories;
 
       List<Channel> typeChannels;
@@ -347,6 +365,16 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
         _searchFocusNode.unfocus();
         _screenFocusNode.requestFocus();
         setState(() => _currentZone = VortexZone.content);
+      } else if (key == LogicalKeyboardKey.arrowLeft) {
+        _searchFocusNode.unfocus();
+        _screenFocusNode.requestFocus();
+        setState(() {
+          _currentZone = VortexZone.sidebar;
+          _focusedNavIndex = 1; // 1 is Home
+          _activeNav = VortexNavTarget.home;
+          _isSidebarExpanded = true;
+        });
+        _selectNavTarget(VortexNavTarget.home);
       }
       return;
     }
@@ -722,11 +750,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
   void _selectNavTarget(VortexNavTarget target) {
     if (target == VortexNavTarget.settings) {
       _clearSearchState();
-      Navigator.push(
-        context,
-        SmoothPageRoute(child: const SettingsScreen()),
-      ).then((_) {
-        _loadInitialData();
+      setState(() {
+        _activeNav = target;
+        _currentZone = VortexZone.content;
+        _isLoading = false;
       });
       return;
     }
@@ -912,36 +939,54 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                   Expanded(
                     child: Column(
                       children: [
-                        VortexSearchBar(
-                          searchController: _searchController,
-                          searchFocusNode: _searchFocusNode,
-                          searchQuery: _searchQuery,
-                          currentZone: _currentZone,
-                          activeNav: _activeNav,
-                          sortOption: _sortOption,
-                          isSidebarExpanded: _isSidebarExpanded,
-                          onToggleSidebar: _toggleSidebarExpanded,
-                          onSearchChanged: (val) {
-                            setState(() => _searchQuery = val);
-                            _loadActiveViewContent();
-                          },
-                          onSearchSubmitted: (val) {
-                            _searchFocusNode.unfocus();
-                            _screenFocusNode.requestFocus();
-                            setState(() {
-                              _searchQuery = val;
-                              _currentZone = VortexZone.content;
-                            });
-                            _loadActiveViewContent();
-                          },
-                          onClearSearch: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                            _loadActiveViewContent();
-                          },
-                          onCycleSort: _cycleSortOption,
-                        ),
-                        _buildTopFilterBar(),
+                        if (_activeNav != VortexNavTarget.settings) ...[
+                          VortexSearchBar(
+                            searchController: _searchController,
+                            searchFocusNode: _searchFocusNode,
+                            searchQuery: _searchQuery,
+                            currentZone: _currentZone,
+                            activeNav: _activeNav,
+                            sortOption: _sortOption,
+                            isSidebarExpanded: _isSidebarExpanded,
+                            onToggleSidebar: _toggleSidebarExpanded,
+                            onLeftArrowPressed: () {
+                              _searchFocusNode.unfocus();
+                              _screenFocusNode.requestFocus();
+                              setState(() {
+                                _currentZone = VortexZone.sidebar;
+                                _focusedNavIndex = 1;
+                                _activeNav = VortexNavTarget.home;
+                                _isSidebarExpanded = true;
+                              });
+                              _selectNavTarget(VortexNavTarget.home);
+                            },
+                            onSearchChanged: (val) {
+                              _searchDebounceTimer?.cancel();
+                              _searchDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+                                if (mounted) {
+                                  setState(() => _searchQuery = val);
+                                  _loadActiveViewContent();
+                                }
+                              });
+                            },
+                            onSearchSubmitted: (val) {
+                              _searchFocusNode.unfocus();
+                              _screenFocusNode.requestFocus();
+                              setState(() {
+                                _searchQuery = val;
+                                _currentZone = VortexZone.content;
+                              });
+                              _loadActiveViewContent();
+                            },
+                            onClearSearch: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                              _loadActiveViewContent();
+                            },
+                            onCycleSort: _cycleSortOption,
+                          ),
+                          _buildTopFilterBar(),
+                        ],
                         Expanded(
                           child: _isLoading
                               ? _buildSkeletonLoading()
@@ -961,6 +1006,14 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
 
   Widget _buildContentArea() {
     switch (_activeNav) {
+      case VortexNavTarget.settings:
+        return VortexSettingsView(
+          onBackToSidebar: _focusSidebar,
+          onDataChanged: () {
+            _cachedAllChannels = null;
+            _loadInitialData();
+          },
+        );
       case VortexNavTarget.home:
         return VortexHomeView(
           shelves: _shelves,
@@ -978,10 +1031,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
             _playItem(item);
           },
           onAddCategoriesTap: () {
-            Navigator.push(
-              context,
-              SmoothPageRoute(child: const SettingsScreen(initialTabIndex: 1)),
-            ).then((_) => _loadInitialData());
+            setState(() {
+              _activeNav = VortexNavTarget.settings;
+              _focusedNavIndex = 5;
+            });
           },
         );
       case VortexNavTarget.liveTv:

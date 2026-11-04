@@ -77,11 +77,28 @@ class VortexTubeService {
 
   /// Builds the complete personalized feed for VortexTube.
   /// Returns empty list if user has zero loved categories and zero loved items.
-  static Future<List<VortexShelf>> getPersonalizedFeed({String searchQuery = ''}) async {
+  static List<Channel>? _cachedChannels;
+
+  static void invalidateCache() {
+    _cachedChannels = null;
+  }
+
+  static Future<List<Channel>> getCachedChannels() async {
+    if (_cachedChannels != null) return _cachedChannels!;
+    _cachedChannels = await DatabaseService.getAllChannels();
+    return _cachedChannels!;
+  }
+
+  /// Builds the complete personalized feed for VortexTube.
+  /// Returns empty list if user has zero loved categories and zero loved items.
+  static Future<List<VortexShelf>> getPersonalizedFeed({
+    String searchQuery = '',
+    List<Channel>? preloadedChannels,
+  }) async {
     final lovedCategoriesList = await PreferencesService.getFavoriteCategories();
     final lovedCategories = lovedCategoriesList.toSet();
 
-    final allChannels = await DatabaseService.getAllChannels();
+    final allChannels = preloadedChannels ?? await getCachedChannels();
 
     // Filter strictly to eligible content: loved category OR loved item
     var eligibleItems = allChannels.where((c) {

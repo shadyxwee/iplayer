@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../sidebar/vortex_nav_types.dart';
 
 class VortexSearchBar extends StatelessWidget {
@@ -14,6 +15,7 @@ class VortexSearchBar extends StatelessWidget {
   final ValueChanged<String> onSearchSubmitted;
   final VoidCallback onClearSearch;
   final VoidCallback onCycleSort;
+  final VoidCallback? onLeftArrowPressed;
 
   const VortexSearchBar({
     super.key,
@@ -29,6 +31,7 @@ class VortexSearchBar extends StatelessWidget {
     required this.onSearchSubmitted,
     required this.onClearSearch,
     required this.onCycleSort,
+    this.onLeftArrowPressed,
   });
 
   String _getSortLabel() {
@@ -100,19 +103,30 @@ class VortexSearchBar extends StatelessWidget {
                   child: Icon(Icons.search_rounded, color: Color(0xFFAAAAAA), size: 18),
                 ),
                 Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    focusNode: searchFocusNode,
-                    style: const TextStyle(color: Colors.white, fontSize: 13.5),
-                    textInputAction: TextInputAction.search,
-                    decoration: const InputDecoration(
-                      hintText: 'Search VortexTube...',
-                      hintStyle: TextStyle(color: Color(0xFF888888), fontSize: 13),
-                      border: InputBorder.none,
-                      isDense: true,
+                  child: Focus(
+                    onKeyEvent: (node, event) {
+                      if (event is KeyDownEvent &&
+                          event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                          onLeftArrowPressed != null) {
+                        onLeftArrowPressed!();
+                        return KeyEventResult.handled;
+                      }
+                      return KeyEventResult.ignored;
+                    },
+                    child: TextField(
+                      controller: searchController,
+                      focusNode: searchFocusNode,
+                      style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                      textInputAction: TextInputAction.search,
+                      decoration: const InputDecoration(
+                        hintText: 'Search VortexTube...',
+                        hintStyle: TextStyle(color: Color(0xFF888888), fontSize: 13),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onChanged: onSearchChanged,
+                      onSubmitted: onSearchSubmitted,
                     ),
-                    onChanged: onSearchChanged,
-                    onSubmitted: onSearchSubmitted,
                   ),
                 ),
                 if (searchQuery.isNotEmpty)

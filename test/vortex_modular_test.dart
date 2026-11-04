@@ -6,6 +6,7 @@ import 'package:riptv/screens/home/vortex_home_view.dart';
 import 'package:riptv/screens/live/vortex_live_view.dart';
 import 'package:riptv/screens/movies/vortex_movies_view.dart';
 import 'package:riptv/screens/series/vortex_series_view.dart';
+import 'package:riptv/screens/settings/vortex_settings_view.dart';
 import 'package:riptv/screens/sidebar/vortex_nav_types.dart';
 import 'package:riptv/screens/sidebar/vortex_sidebar.dart';
 import 'package:riptv/screens/search/vortex_search_bar.dart';
@@ -106,7 +107,6 @@ void main() {
       ));
 
       expect(find.text('Inception'), findsOneWidget);
-      // Header and card subtext both display category name
       expect(find.text('Action Movies'), findsNWidgets(2));
       expect(tester.takeException(), isNull);
     });
@@ -177,6 +177,33 @@ void main() {
 
       expect(find.text('HBO HD'), findsOneWidget);
       expect(find.text('Premium TV'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('VortexSettingsView renders TV OS categories and panels', (tester) async {
+      tester.view.physicalSize = const Size(1280, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1280,
+            height: 720,
+            child: VortexSettingsView(
+              onBackToSidebar: () {},
+              onDataChanged: () {},
+            ),
+          ),
+        ),
+      ));
+
+      expect(find.text('Settings'), findsOneWidget);
+      expect(find.text('CATEGORIES'), findsOneWidget);
+      expect(find.text('Add to VortexTube'), findsWidgets);
+      expect(find.text('Playlists Manager'), findsOneWidget);
+      expect(find.text('EPG & TV Guide'), findsOneWidget);
+      expect(find.text('About VortexTube'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
