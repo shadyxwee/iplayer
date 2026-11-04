@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../models/channel.dart';
 import '../../services/database_service.dart';
+import '../../services/stalker_service.dart';
 import '../../l10n/app_localizations.dart';
 
 class VideoPlayerScreen extends StatefulWidget {
@@ -144,8 +145,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         }
       });
 
+      String playbackUrl = widget.channel.url;
+
+      // Dynamic stream resolution for Stalker / Ministra channels
+      if (playbackUrl.contains('/ch/') && playbackUrl.endsWith('_')) {
+        try {
+          final playlist = await DatabaseService.getPlaylistById(widget.channel.playlistId ?? 0);
+          if (playlist != null && playlist.isStalker) {
+            final stalker = StalkerService(
+              portalUrl: playlist.url,
+              macAddress: playlist.macAddress ?? '',
+              serialNumber: playlist.serialNumber,
+              deviceId: playlist.deviceId,
+              deviceId2: playlist.deviceId2,
+              signature: playlist.signature,
+            );
+            await stalker.handshake();
+            playbackUrl = await stalker.createStreamLink(playbackUrl, type: 'itv');
+          }
+        } catch (_) {}
+      }
+
       final Map<String, String> headers = {
-        'User-Agent': widget.channel.userAgent ?? 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36 IPTV-Smarters/1.0',
+        'User-Agent': widget.channel.userAgent ?? 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 1812  Safari/533.3',
         'Connection': 'keep-alive',
       };
       if (widget.channel.referer != null) {
@@ -154,7 +176,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
       await newPlayer.open(
         Media(
-          widget.channel.url,
+          playbackUrl,
           httpHeaders: headers,
         ),
         play: true,

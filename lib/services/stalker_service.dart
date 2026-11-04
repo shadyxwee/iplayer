@@ -1,83 +1,184 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../models/channel.dart';
 import '../models/vod_item.dart';
 import '../models/series_item.dart';
 
-/// Stalker / Ministra Portal Client Service
-/// Implements Best Practice Specification v1.0:
-/// - Mandatory Endpoint Auto-Detection
-/// - Proper Headers & Cookies (User-Agent, Bearer Auth, MAC, stb_lang, timezone)
-/// - Handshake & Token Renewal
-/// - MAC Checker (handshake + get_profile / get_main_info)
-/// - MAC Player (Live, VOD, Series, and stream link creation)
+/// Cryptographic hardware fingerprint signatures for bypassing anti-tamper middleware
+class StalkerSignatures {
+  final String adid;
+  final String sncut;
+  final String devenc;
+  final String devenc2;
+  final String signature;
+
+  const StalkerSignatures({
+    required this.adid,
+    required this.sncut,
+    required this.devenc,
+    required this.devenc2,
+    required this.signature,
+  });
+
+  static StalkerSignatures calculate(String macAddress) {
+    final bytes = utf8.encode(macAddress);
+    final adid = sha1.convert(bytes).toString();
+    final snFull = md5.convert(bytes).toString().toUpperCase();
+    final sncut = snFull.length >= 13 ? snFull.substring(0, 13) : snFull;
+    final devenc = sha256.convert(bytes).toString().toUpperCase();
+    final devenc2 = sha256.convert(utf8.encode(sncut)).toString().toUpperCase();
+
+    final sigPayload = '$sncut+$macAddress';
+    final sig = sha256.convert(utf8.encode(sigPayload)).toString().toUpperCase();
+
+    return StalkerSignatures(
+      adid: adid,
+      sncut: sncut,
+      devenc: devenc,
+      devenc2: devenc2,
+      signature: sig,
+    );
+  }
+}
+
+/// Comprehensive Stalker / Ministra MAC IPTV Player Service
+/// Implements the complete Ministra & Stalker protocol:
+/// - Exact URL suffix normalization and prioritization
+/// - Basic, SN-ID, and Advanced Cryptographic signatures
+/// - GET / POST Handshake probing with prehash/token parameter differences
+/// - Session initialization with get_modules activation
+/// - Direct playback vs. create_link resolution with ffmpeg stripping
+/// - Pagination for Live, VOD, and Series
 class StalkerService {
   final String portalUrl;
   final String macAddress;
-  final String deviceId;
-  final String deviceId2;
-  final String signature;
-  final String serialNumber;
+  final bool useAdvanced;
+  final String? serialNumber;
+  final String? deviceId;
+  final String? deviceId2;
+  final String? signature;
 
   String? _activeEndpoint;
   String? _token;
+  DateTime? _tokenTimestamp;
 
   static const String userAgent =
-      'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+      'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 1812  Safari/533.3';
   static const String stbLang = 'en';
-  static const String timezone = 'Europe/London';
+  static const String timezone = 'Asia%20Shanghai';
 
   StalkerService({
     required this.portalUrl,
-    required this.macAddress,
-    this.deviceId = 'MAG254_DEVICE_ID_DEFAULT',
-    this.deviceId2 = 'MAG254_DEVICE_ID2_DEFAULT',
-    this.signature = 'MAG254_SIGNATURE_DEFAULT',
-    this.serialNumber = 'MAG254_SERIAL_DEFAULT',
-  });
+    required String macAddress,
+    this.useAdvanced = true,
+    this.serialNumber,
+    this.deviceId,
+    this.deviceId2,
+    this.signature,
+  }) : macAddress = formatMac(macAddress);
 
-  /// Step 3.1: Normalize the user-provided Portal URL:
-  /// - Remove trailing /c, /c/, /index.html, etc.
-  /// - Keep only scheme + host + port + optional base path up to (but not including) /c
-  static String normalizeUrl(String rawUrl) {
-    var url = rawUrl.trim();
-
-    while (true) {
-      final prev = url;
-      url = url.replaceAll(RegExp(r'/+$'), '');
-      if (url.endsWith('/index.html')) {
-        url = url.substring(0, url.length - 11);
-      } else if (url.endsWith('/index.php')) {
-        url = url.substring(0, url.length - 10);
-      } else if (url.endsWith('/c')) {
-        url = url.substring(0, url.length - 2);
-      } else if (url.endsWith('/stalker_portal/c')) {
-        url = url.substring(0, url.length - 17);
-      } else if (url.endsWith('/stalker_portal')) {
-        url = url.substring(0, url.length - 15);
+  /// Sanitize MAC address to XX:XX:XX:XX:XX:XX uppercase
+  static String formatMac(String mac) {
+    final clean = mac.replaceAll(RegExp(r'[^0-9A-Fa-f]'), '').toUpperCase();
+    if (clean.length == 12) {
+      final parts = <String>[];
+      for (int i = 0; i < 12; i += 2) {
+        parts.add(clean.substring(i, i + 2));
       }
-      if (url == prev) break;
+      return parts.join(':');
     }
-
-    return url.replaceAll(RegExp(r'/+$'), '');
+    return mac.toUpperCase();
   }
 
-  /// Step 3.2: Generate candidate endpoints in priority order:
-  /// 1. {base}/portal.php
-  /// 2. {base}/c/portal.php
-  /// 3. {base}/stalker_portal/server/load.php
-  /// 4. {base}/server/load.php
-  /// 5. {base}/stalker_portal/c/portal.php
+  /// Phase 1: URL Normalization:
+  /// Recursively strip known suffixes down to root host/base path
+  static String normalizeUrl(String rawUrl) {
+    var url = rawUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'http://$url';
+    }
+
+    final uri = Uri.parse(url);
+    var path = uri.path;
+    if (path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+
+    const suffixes = [
+      '/c/index.html',
+      '/c/index.php',
+      '/index.html',
+      '/index.php',
+      '/stalker_portal/server/load.php',
+      '/stalker_portal/c/portal.php',
+      '/stalker_portal/c',
+      '/stalker_portal',
+      '/c/portal.php',
+      '/server/load.php',
+      '/portal.php',
+      '/load.php',
+      '/c',
+    ];
+
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (final s in suffixes) {
+        if (path.endsWith(s)) {
+          path = path.substring(0, path.length - s.length);
+          if (path.endsWith('/')) path = path.substring(0, path.length - 1);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    final portStr = uri.hasPort ? ':${uri.port}' : '';
+    return '${uri.scheme}://${uri.host}$portStr$path';
+  }
+
+  /// Generate candidate endpoints in priority order
   static List<String> candidateEndpoints(String rawUrl) {
+    final cleanRaw = rawUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final base = normalizeUrl(rawUrl);
-    return [
+
+    final candidates = <String>[];
+
+    // Priority 0: Explicit endpoint if user directly gave a .php script
+    if (cleanRaw.endsWith('.php')) {
+      candidates.add(cleanRaw);
+    }
+
+    candidates.addAll([
       '$base/portal.php',
       '$base/c/portal.php',
       '$base/stalker_portal/server/load.php',
       '$base/server/load.php',
       '$base/stalker_portal/c/portal.php',
-    ];
+    ]);
+
+    final seen = <String>{};
+    final dedup = <String>[];
+    for (final c in candidates) {
+      if (seen.add(c)) {
+        dedup.add(c);
+      }
+    }
+    return dedup;
+  }
+
+  /// Build Cookie string matching Advanced Mode specification
+  String _buildCookieString([String? tok]) {
+    final t = tok ?? _token ?? '';
+    if (useAdvanced) {
+      final sig = StalkerSignatures.calculate(macAddress);
+      final sn = serialNumber?.isNotEmpty == true ? serialNumber! : sig.sncut;
+      final devId = deviceId?.isNotEmpty == true ? deviceId! : sig.devenc;
+      return 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone; token=$t; adid=${sig.adid}; debug=1; device_id2=$devId; device_id=$devId; hw_version=1.7-BD-00; sn=$sn';
+    }
+    return 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone; token=$t';
   }
 
   /// Required HTTP headers
@@ -85,16 +186,13 @@ class StalkerService {
     final base = normalizeUrl(portalUrl);
     final headers = <String, String>{
       'User-Agent': userAgent,
-      'Connection': 'Keep-Alive',
-      'Accept-Encoding': 'gzip',
       'Referer': '$base/c/',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Accept-Encoding': 'gzip',
+      'Connection': 'Keep-Alive',
+      'Cookie': _buildCookieString(_token),
     };
-
-    var cookie = 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone';
-    if (_token != null && _token!.isNotEmpty) {
-      cookie += '; token=$_token';
-    }
-    headers['Cookie'] = cookie;
 
     if (includeAuth && _token != null && _token!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_token';
@@ -103,59 +201,112 @@ class StalkerService {
     return headers;
   }
 
-  /// Step 3.3 & Step 5: Endpoint Auto-Detection & Handshake
+  /// Handshake & Session Negotiation:
+  /// Iterates through candidate endpoints and falls back between GET and POST
   Future<String> handshake() async {
-    if (_activeEndpoint != null) {
-      try {
-        final tok = await _tryHandshakeEndpoint(_activeEndpoint!);
-        _token = tok;
-        return tok;
-      } catch (_) {
-        _activeEndpoint = null;
+    // If we have a working active endpoint and fresh token (< 9 minutes old), reuse
+    if (_activeEndpoint != null && _token != null && _tokenTimestamp != null) {
+      final age = DateTime.now().difference(_tokenTimestamp!).inSeconds;
+      if (age < 540) {
+        return _token!;
       }
     }
 
-    final candidates = candidateEndpoints(portalUrl);
+    final candidates = _activeEndpoint != null
+        ? [_activeEndpoint!, ...candidateEndpoints(portalUrl)]
+        : candidateEndpoints(portalUrl);
+
     String? lastError;
 
-    for (final candidate in candidates) {
+    for (final endpoint in candidates) {
+      final isLoadPhp = endpoint.contains('load.php');
+      final handshakeGetUrl = isLoadPhp
+          ? '$endpoint?type=stb&action=handshake&prehash=false&JsHttpRequest=1-xml'
+          : '$endpoint?type=stb&action=handshake&token=&JsHttpRequest=1-xml';
+
+      // 1. Try GET
       try {
-        final tok = await _tryHandshakeEndpoint(candidate);
-        _activeEndpoint = candidate;
-        _token = tok;
-        return tok;
+        final headers = getHeaders(includeAuth: false);
+        final res = await http.get(Uri.parse(handshakeGetUrl), headers: headers).timeout(const Duration(seconds: 8));
+
+        String? extractedToken;
+        if (res.statusCode == 200) {
+          extractedToken = _extractToken(res.body);
+        }
+
+        // 2. Try POST fallback if GET failed
+        if (extractedToken == null || ['UDONTHAVEACCESS', 'INVALID', 'ERROR', 'FAILED'].contains(extractedToken.toUpperCase())) {
+          final postHeaders = Map<String, String>.from(headers);
+          postHeaders['Content-Type'] = 'application/x-www-form-urlencoded; charset=utf-8';
+          final sig = StalkerSignatures.calculate(macAddress);
+          final postBody = {
+            'type': 'stb',
+            'action': 'handshake',
+            'JsHttpRequest': '1-xml',
+            'sn': serialNumber?.isNotEmpty == true ? serialNumber! : sig.sncut,
+            'id1': deviceId?.isNotEmpty == true ? deviceId! : sig.devenc,
+          };
+          final postRes = await http.post(Uri.parse(endpoint), headers: postHeaders, body: postBody).timeout(const Duration(seconds: 8));
+          if (postRes.statusCode == 200) {
+            extractedToken = _extractToken(postRes.body);
+          }
+        }
+
+        if (extractedToken != null &&
+            !['UDONTHAVEACCESS', 'INVALID', 'ERROR', 'FAILED'].contains(extractedToken.toUpperCase())) {
+          _activeEndpoint = endpoint;
+          _token = extractedToken;
+          _tokenTimestamp = DateTime.now();
+
+          // Phase 3.4: Mandatory session initialization with get_modules
+          await _activateSession(endpoint, extractedToken);
+          return extractedToken;
+        } else if (extractedToken != null) {
+          lastError = 'Server returned: $extractedToken';
+        }
       } catch (e) {
         lastError = e.toString();
+        continue;
       }
     }
 
-    throw Exception('Failed to detect Stalker portal API endpoint: $lastError');
+    throw Exception('Failed to handshake with Stalker portal: ${lastError ?? "all candidate endpoints failed"}');
   }
 
-  Future<String> _tryHandshakeEndpoint(String endpoint) async {
-    final uri = Uri.parse(endpoint).replace(queryParameters: {
-      'type': 'stb',
-      'action': 'handshake',
-      'JsHttpRequest': '1-xml',
-    });
+  /// Activate token session on server by calling get_modules
+  Future<void> _activateSession(String endpoint, String tok) async {
+    try {
+      final uri = Uri.parse('$endpoint?type=stb&action=get_modules&JsHttpRequest=1-xml');
+      final headers = getHeaders(includeAuth: true);
+      headers['Cookie'] = _buildCookieString(tok);
+      headers['Authorization'] = 'Bearer $tok';
+      await http.get(uri, headers: headers).timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
 
-    final response = await http
-        .get(uri, headers: getHeaders(includeAuth: false))
-        .timeout(const Duration(seconds: 10));
-
-    if (response.statusCode == 200) {
-      final decoded = jsonDecode(response.body);
+  /// Robust layered token extraction
+  static String? _extractToken(String body) {
+    try {
+      final decoded = json.decode(body);
       if (decoded is Map && decoded.containsKey('js')) {
         final js = decoded['js'];
         if (js is Map && js.containsKey('token') && js['token'] != null) {
-          final token = js['token'].toString();
-          if (token.isNotEmpty) {
-            return token;
-          }
+          final t = js['token'].toString().trim();
+          if (t.isNotEmpty) return t;
         }
       }
-    }
-    throw Exception('Handshake failed at $endpoint with status ${response.statusCode}');
+    } catch (_) {}
+
+    final m1 = RegExp(r'"token"\s*:\s*"([^"]+)"').firstMatch(body);
+    if (m1 != null) return m1.group(1);
+
+    final m2 = RegExp(r'token":"([^"]+)').firstMatch(body);
+    if (m2 != null) return m2.group(1);
+
+    final m3 = RegExp(r'js\s*:\s*\{\s*"token"\s*:\s*"([^"]+)"').firstMatch(body);
+    if (m3 != null) return m3.group(1);
+
+    return null;
   }
 
   /// Generic request with token auto-injection and 401 retry
@@ -508,23 +659,45 @@ class StalkerService {
     }
   }
 
-  /// Step 8.4: Create stream link
-  Future<Map<String, dynamic>> createLink(String cmd, {String type = 'itv'}) async {
+  /// Phase 6: Stream Playback & Link Resolution
+  /// Handles /ch/..._ indirection, creates authenticated link via create_link, and strips ffmpeg prefix
+  Future<String> createStreamLink(String cmd, {String type = 'itv', String? episodeNumber}) async {
+    var rawCmd = cleanCmd(cmd);
+
+    // If channel doesn't require indirection and is direct, play directly
+    if (type == 'itv' && (!rawCmd.contains('/ch/') || !rawCmd.endsWith('_'))) {
+      return rawCmd;
+    }
+
     try {
-      final res = await request({
+      final params = <String, String>{
         'type': type,
         'action': 'create_link',
-        'cmd': cmd,
-      });
+        'cmd': rawCmd,
+      };
+      if (episodeNumber != null && episodeNumber.isNotEmpty) {
+        params['series'] = episodeNumber;
+      }
 
-      var streamUrl = cleanCmd(cmd);
+      final res = await request(params);
+
+      var streamUrl = rawCmd;
       if (res is Map && res['cmd'] != null) {
         streamUrl = cleanCmd(res['cmd'].toString());
       }
+      return streamUrl;
+    } catch (_) {
+      return rawCmd;
+    }
+  }
 
+  /// Step 8.4: Create stream link (backward compatible map signature)
+  Future<Map<String, dynamic>> createLink(String cmd, {String type = 'itv'}) async {
+    try {
+      final resolvedUrl = await createStreamLink(cmd, type: type);
       return {
         'success': true,
-        'stream_url': streamUrl,
+        'stream_url': resolvedUrl,
         'headers': getHeaders(includeAuth: true),
       };
     } catch (e) {
