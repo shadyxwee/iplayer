@@ -7,6 +7,7 @@ import '../../models/channel.dart';
 import '../../models/playlist.dart';
 import '../../services/metadata_service.dart';
 import '../../services/database_service.dart';
+import '../../services/series_parser.dart';
 import '../../services/stalker_service.dart';
 import '../../services/xtream_service.dart';
 import '../player/video_player_screen.dart';
@@ -128,6 +129,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
        }
     } else {
        meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
+       // Load all M3U episode channels for this series from the database
+       final allChannels = await DatabaseService.getAllChannels();
+       final m3uSeriesGroup = SeriesParser.groupIntoSeries(allChannels);
+       // Match by name or series id
+       final matched = m3uSeriesGroup.values.firstWhere(
+         (s) => s.name.toLowerCase() == widget.series.name.toLowerCase() ||
+                (s.id != null && s.id == widget.series.id),
+         orElse: () => widget.series,
+       );
+       if (matched.seasons.isNotEmpty && widget.series.seasons.isEmpty) {
+         widget.series.seasons.addAll(matched.seasons);
+       }
     }
 
     if (mounted) {
@@ -321,9 +334,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Widget build(BuildContext context) {
     // Normalizing seasons and episodes
     final dynamic seasonsRaw = _seriesData?['seasons'];
+    final dynamic episodesRaw = _seriesData?['episodes'];
     List seasons = [];
     if (seasonsRaw is List) {
       seasons = seasonsRaw;
+    } else if (episodesRaw is Map) {
+      seasons = episodesRaw.keys.map((k) => {'season_number': k.toString()}).toList()
+        ..sort((a, b) => (int.tryParse(a['season_number'] ?? '0') ?? 0)
+            .compareTo(int.tryParse(b['season_number'] ?? '0') ?? 0));
     } else if (widget.series.seasons.isNotEmpty) {
       seasons = widget.series.seasons.map((s) => {'season_number': s.seasonNumber}).toList();
     }
@@ -332,7 +350,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       _selectedSeason = (seasons.first['season_number'] ?? '1').toString();
     }
 
-    final dynamic episodesRaw = _seriesData?['episodes'];
     List currentEpisodes = [];
     if (_selectedSeason != null) {
       if (episodesRaw != null) {

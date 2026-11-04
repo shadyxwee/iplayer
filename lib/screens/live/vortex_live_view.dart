@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/channel.dart';
+import '../../services/image_cache_service.dart';
 import '../sidebar/vortex_nav_types.dart';
 
 class VortexLiveView extends StatelessWidget {
@@ -159,9 +160,10 @@ class VortexLiveView extends StatelessWidget {
                         padding: const EdgeInsets.all(9),
                         child: ClipOval(
                           child: item.logo != null && item.logo!.isNotEmpty
-                              ? Image.network(
-                                  item.logo!,
+                              ? Image(
+                                  image: ImageCacheService.getCachedImageProvider(item.logo!),
                                   fit: BoxFit.contain,
+                                  gaplessPlayback: true,
                                   errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 24),
                                 )
                               : const Icon(Icons.tv, color: Colors.white70, size: 24),

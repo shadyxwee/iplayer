@@ -1009,9 +1009,10 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
       case VortexNavTarget.settings:
         return VortexSettingsView(
           onBackToSidebar: _focusSidebar,
-          onDataChanged: () {
+          onDataChanged: () async {
             _cachedAllChannels = null;
-            _loadInitialData();
+            final favCats = await PreferencesService.getFavoriteCategories();
+            _favoriteCategories = favCats.toSet();
           },
         );
       case VortexNavTarget.home:

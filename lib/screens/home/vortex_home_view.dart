@@ -177,9 +177,10 @@ class VortexHomeView extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               child: ClipOval(
                 child: item.logo != null && item.logo!.isNotEmpty
-                    ? Image.network(
-                        item.logo!,
+                    ? Image(
+                        image: ImageCacheService.getCachedImageProvider(item.logo!),
                         fit: BoxFit.contain,
+                        gaplessPlayback: true,
                         errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 26),
                       )
                     : const Icon(Icons.tv, color: Colors.white70, size: 26),

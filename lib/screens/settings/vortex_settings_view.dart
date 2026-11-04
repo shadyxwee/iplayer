@@ -6,11 +6,11 @@ import '../../services/database_service.dart';
 import '../../services/preferences_service.dart';
 import '../../services/vortextube_service.dart';
 import '../../services/playlist_importer_service.dart';
-import '../playlist_manager_screen.dart';
 
 enum VortexSettingsTab {
   addToVortexTube,
   playlistsManager,
+  addPortal,
   epgGuide,
   aboutVortexTube,
 }
@@ -53,6 +53,14 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
   Map<String, int> _seriesCategories = {};
   bool _isLoading = true;
 
+  // Add / Edit Portal Form State
+  Playlist? _editingPlaylist;
+  PlaylistSourceType _portalSourceType = PlaylistSourceType.xtreamCodes;
+  final TextEditingController _playlistNameController = TextEditingController();
+  final TextEditingController _serverUrlController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
   final ScrollController _rightScrollController = ScrollController();
   final FocusNode _settingsFocusNode = FocusNode();
 
@@ -93,6 +101,10 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
   void dispose() {
     _rightScrollController.dispose();
     _settingsFocusNode.dispose();
+    _playlistNameController.dispose();
+    _serverUrlController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -182,57 +194,143 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
     widget.onDataChanged();
   }
 
-  Future<void> _showAddPlaylistDialog() async {
-    final result = await showDialog<Playlist>(
+  Future<void> _deletePlaylist(Playlist playlist) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => const PlaylistDialog(),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Playlist', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Are you sure you want to delete "${playlist.name}" and all its content?',
+          style: const TextStyle(color: Color(0xFFCCCCCC)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF9E9E9E))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE50914), foregroundColor: Colors.white),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
 
-    if (result != null && mounted) {
-      final importResult = await PlaylistImporterService.importPlaylist(context, result);
-      if (mounted) {
-        if (importResult['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Added playlist "${result.name}" with ${importResult["count"]} items'),
-              backgroundColor: const Color(0xFF1B6B38),
-            ),
-          );
+    if (confirmed == true && mounted) {
+      await DatabaseService.deletePlaylist(playlist.id);
+      final activeId = await PreferencesService.getActivePlaylistId();
+      if (activeId == playlist.id) {
+        final remaining = await DatabaseService.getAllPlaylists();
+        if (remaining.isNotEmpty) {
+          await PreferencesService.setActivePlaylistId(remaining.first.id);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to import playlist: ${importResult["error"]}'),
-              backgroundColor: const Color(0xFFB3261E),
-            ),
-          );
+          await PreferencesService.setActivePlaylistId(null);
         }
-        await _loadSettingsData();
-        widget.onDataChanged();
       }
+      VortexTubeService.invalidateCache();
+      await _loadSettingsData();
+      widget.onDataChanged();
     }
   }
 
-  Future<void> _showEditPlaylistDialog(Playlist playlist) async {
-    final result = await showDialog<Playlist>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => PlaylistDialog(playlist: playlist),
+  void _openAddPortalForm() {
+    setState(() {
+      _editingPlaylist = null;
+      _portalSourceType = PlaylistSourceType.xtreamCodes;
+      _playlistNameController.clear();
+      _serverUrlController.clear();
+      _usernameController.clear();
+      _passwordController.clear();
+      _activeTab = VortexSettingsTab.addPortal;
+      _isRightPaneFocused = true;
+      _focusedRightIndex = 0;
+    });
+  }
+
+  void _openEditPortalForm(Playlist playlist) {
+    setState(() {
+      _editingPlaylist = playlist;
+      _portalSourceType = playlist.sourceType;
+      _playlistNameController.text = playlist.name;
+      _serverUrlController.text = playlist.url;
+      _usernameController.text = playlist.sourceType == PlaylistSourceType.stalker
+          ? (playlist.macAddress ?? '')
+          : (playlist.username ?? '');
+      _passwordController.text = playlist.password ?? '';
+      _activeTab = VortexSettingsTab.addPortal;
+      _isRightPaneFocused = true;
+      _focusedRightIndex = 0;
+    });
+  }
+
+  Future<void> _submitPortalForm() async {
+    final name = _playlistNameController.text.trim();
+    final url = _serverUrlController.text.trim();
+    final user = _usernameController.text.trim();
+    final pass = _passwordController.text.trim();
+
+    if (name.isEmpty || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter Playlist Name and URL'),
+          backgroundColor: Color(0xFFB3261E),
+        ),
+      );
+      return;
+    }
+
+    final isEdit = _editingPlaylist != null;
+    final playlist = _editingPlaylist ?? Playlist();
+    playlist.name = name;
+    playlist.url = url;
+    playlist.sourceType = _portalSourceType;
+
+    if (_portalSourceType == PlaylistSourceType.stalker) {
+      playlist.macAddress = user;
+      playlist.username = null;
+      playlist.password = null;
+    } else if (_portalSourceType == PlaylistSourceType.xtreamCodes) {
+      playlist.username = user;
+      playlist.password = pass;
+      playlist.macAddress = null;
+    } else {
+      playlist.username = null;
+      playlist.password = null;
+      playlist.macAddress = null;
+    }
+
+    final importResult = await PlaylistImporterService.importPlaylist(
+      context,
+      playlist,
+      isEdit: isEdit,
     );
 
-    if (result != null && mounted) {
-      final importResult = await PlaylistImporterService.importPlaylist(context, result, isEdit: true);
-      if (mounted) {
-        if (importResult['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Updated playlist "${result.name}"'),
-              backgroundColor: const Color(0xFF1B6B38),
-            ),
-          );
-        }
+    if (mounted) {
+      if (importResult['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isEdit
+                ? 'Updated playlist "$name"'
+                : 'Added playlist "$name" with ${importResult["count"]} items'),
+            backgroundColor: const Color(0xFF1B6B38),
+          ),
+        );
+        setState(() {
+          _activeTab = VortexSettingsTab.playlistsManager;
+          _isRightPaneFocused = false;
+        });
         await _loadSettingsData();
         widget.onDataChanged();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: ${importResult["error"]}'),
+            backgroundColor: const Color(0xFFB3261E),
+          ),
+        );
       }
     }
   }
@@ -242,6 +340,13 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
     final key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.backspace) {
+      if (_activeTab == VortexSettingsTab.addPortal) {
+        setState(() {
+          _activeTab = VortexSettingsTab.playlistsManager;
+          _isRightPaneFocused = false;
+        });
+        return;
+      }
       if (_isRightPaneFocused) {
         setState(() => _isRightPaneFocused = false);
       } else {
@@ -251,7 +356,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
     }
 
     if (!_isRightPaneFocused) {
-      // Left Categories navigation
       if (key == LogicalKeyboardKey.arrowDown) {
         setState(() {
           _focusedLeftIndex = (_focusedLeftIndex + 1) % _tabs.length;
@@ -273,7 +377,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
         widget.onBackToSidebar();
       }
     } else {
-      // Right pane navigation
       if (key == LogicalKeyboardKey.arrowLeft) {
         setState(() => _isRightPaneFocused = false);
       } else if (key == LogicalKeyboardKey.arrowDown) {
@@ -304,13 +407,11 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Left Categories D-Pad list
                   SizedBox(
                     width: 310,
                     child: _buildLeftCategoryList(),
                   ),
                   const SizedBox(width: 24),
-                  // Right Detail Viewport
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
@@ -423,95 +524,124 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           itemBuilder: (context, index) {
             final item = _tabs[index];
             final tab = item['tab'] as VortexSettingsTab;
-            final isActive = _activeTab == tab;
+            final isPlaylistsTab = tab == VortexSettingsTab.playlistsManager;
+            final isActive = _activeTab == tab || (_activeTab == VortexSettingsTab.addPortal && isPlaylistsTab);
             final isFocused = !_isRightPaneFocused && _focusedLeftIndex == index;
 
-            Color bgColor;
-            Color textColor;
-            Color subColor;
-            Color iconColor;
+            Color bgColor = isActive ? Colors.white : const Color(0xFF141418);
+            Color textColor = isActive ? Colors.black : const Color(0xFFE5E5E5);
+            Color subColor = isActive ? const Color(0xFF444444) : const Color(0xFF7A7A88);
+            Color iconColor = isActive ? Colors.black : const Color(0xFF8D8D9B);
 
-            if (isActive) {
-              bgColor = Colors.white;
-              textColor = Colors.black;
-              subColor = const Color(0xFF444444);
-              iconColor = Colors.black;
-            } else {
-              bgColor = const Color(0xFF141418);
-              textColor = const Color(0xFFE5E5E5);
-              subColor = const Color(0xFF7A7A88);
-              iconColor = const Color(0xFF8D8D9B);
-            }
-
-            return InkWell(
-              onTap: () {
-                setState(() {
-                  _activeTab = tab;
-                  _focusedLeftIndex = index;
-                  _isRightPaneFocused = false;
-                });
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: bgColor,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _activeTab = tab;
+                      _focusedLeftIndex = index;
+                      _isRightPaneFocused = false;
+                    });
+                  },
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isFocused ? Colors.white : (isActive ? Colors.white : const Color(0xFF23232B)),
-                    width: isFocused ? 2.5 : 1,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isFocused ? Colors.white : (isActive ? Colors.white : const Color(0xFF23232B)),
+                        width: isFocused ? 2.5 : 1,
+                      ),
+                      boxShadow: isActive
+                          ? [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                blurRadius: 12,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(item['icon'] as IconData, color: iconColor, size: 22),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['title'] as String,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item['subtitle'] as String,
+                                style: TextStyle(
+                                  color: subColor,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '>',
+                          style: TextStyle(
+                            color: isActive ? Colors.black : const Color(0xFF555562),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            blurRadius: 12,
-                          ),
-                        ]
-                      : null,
                 ),
-                child: Row(
-                  children: [
-                    Icon(item['icon'] as IconData, color: iconColor, size: 22),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item['title'] as String,
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            item['subtitle'] as String,
-                            style: TextStyle(
-                              color: subColor,
-                              fontSize: 11,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                // Nested breadcrumb for Add / Edit Portal
+                if (isPlaylistsTab && _activeTab == VortexSettingsTab.addPortal) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    margin: const EdgeInsets.only(left: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C24),
+                      borderRadius: BorderRadius.circular(8),
+                      border: const Border(left: BorderSide(color: Colors.white, width: 2)),
                     ),
-                    Text(
-                      '>',
-                      style: TextStyle(
-                        color: isActive ? Colors.black : const Color(0xFF555562),
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('↳ ', style: TextStyle(color: Color(0xFF888888), fontSize: 12)),
+                            Text(
+                              _editingPlaylist != null ? 'Edit: ${_editingPlaylist!.name}' : 'Add New Portal',
+                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2E2E38),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('WIZARD', style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                ],
+              ],
             );
           },
         ),
@@ -525,6 +655,8 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
         return _buildAddToVortexTubePanel();
       case VortexSettingsTab.playlistsManager:
         return _buildPlaylistsManagerPanel();
+      case VortexSettingsTab.addPortal:
+        return _buildAddPortalPanel();
       case VortexSettingsTab.epgGuide:
         return _buildEpgGuidePanel();
       case VortexSettingsTab.aboutVortexTube:
@@ -557,20 +689,19 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Panel Header
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+          children: const [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Add to VortexTube',
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 3),
                 Text(
-                  'Select and favorite categories to display on your VortexTube player home shelves',
+                  'Select and favorite categories across Live TV, Movies / VOD, and Series to display on your VortexTube player home shelves',
                   style: TextStyle(color: Color(0xFF828290), fontSize: 12),
                 ),
               ],
@@ -578,7 +709,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           ],
         ),
         const SizedBox(height: 14),
-        // 3-Type Segmented Category Selector Tabs (Live TV, Movies / VOD, Series)
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -595,7 +725,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           ),
         ),
         const SizedBox(height: 14),
-        // Subheader
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -619,7 +748,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           ],
         ),
         const SizedBox(height: 10),
-        // Grid of Category Cards (2 columns)
         Expanded(
           child: sortedCatEntries.isEmpty
               ? const Center(
@@ -629,6 +757,7 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                   ),
                 )
               : GridView.builder(
+                  key: ValueKey('grid_${_activeCatGroup.name}'),
                   controller: _rightScrollController,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
@@ -716,7 +845,6 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                 ),
         ),
         const SizedBox(height: 12),
-        // Bottom Action Bar
         Container(
           padding: const EdgeInsets.only(top: 12),
           decoration: const BoxDecoration(
@@ -799,10 +927,10 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
+          children: const [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Playlists Manager',
                   style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
@@ -817,12 +945,11 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           ],
         ),
         const SizedBox(height: 16),
-        // Add New Playlist Button
         SizedBox(
           width: double.infinity,
           height: 48,
           child: ElevatedButton.icon(
-            onPressed: _showAddPlaylistDialog,
+            onPressed: _openAddPortalForm,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4A4A4A),
               foregroundColor: Colors.white,
@@ -929,9 +1056,14 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => _showEditPlaylistDialog(pl),
+                        onPressed: () => _openEditPortalForm(pl),
                         icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 18),
                         tooltip: 'Edit Playlist',
+                      ),
+                      IconButton(
+                        onPressed: () => _deletePlaylist(pl),
+                        icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF4444), size: 18),
+                        tooltip: 'Delete Playlist',
                       ),
                       const SizedBox(width: 8),
                       if (isActive)
@@ -964,6 +1096,221 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAddPortalPanel() {
+    final isEdit = _editingPlaylist != null;
+
+    return SingleChildScrollView(
+      controller: _rightScrollController,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              InkWell(
+                onTap: () => setState(() => _activeTab = VortexSettingsTab.playlistsManager),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E24),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF2C2C38)),
+                  ),
+                  child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEdit ? 'Edit Playlist / Portal' : 'Add New Playlist / Portal',
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Connect Xtream Codes API, M3U file/URL, or configure MAC address portal',
+                    style: TextStyle(color: Color(0xFF828290), fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // Protocol Selector Buttons Radio Group
+          Row(
+            children: [
+              _buildPortalTypeRadio('Xtream Codes', PlaylistSourceType.xtreamCodes),
+              const SizedBox(width: 12),
+              _buildPortalTypeRadio('M3U URL / File', PlaylistSourceType.m3u),
+              const SizedBox(width: 12),
+              _buildPortalTypeRadio('Stalker MAC', PlaylistSourceType.stalker),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Form inputs matching HTML/Tailwind spec
+          _buildFormLabel('PLAYLIST NAME'),
+          _buildFormInput(_playlistNameController, 'e.g. My IPTV Provider'),
+          const SizedBox(height: 14),
+          _buildFormLabel(_portalSourceType == PlaylistSourceType.stalker
+              ? 'PORTAL URL'
+              : (_portalSourceType == PlaylistSourceType.m3u
+                  ? 'M3U PLAYLIST URL OR LOCAL PATH'
+                  : 'SERVER URL / PORTAL DOMAIN')),
+          _buildFormInput(
+            _serverUrlController,
+            _portalSourceType == PlaylistSourceType.stalker ? 'http://stalker-server.net/c/' : 'http://domain.com:port',
+            isMono: true,
+          ),
+          const SizedBox(height: 14),
+          if (_portalSourceType != PlaylistSourceType.m3u) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildFormLabel(_portalSourceType == PlaylistSourceType.stalker ? 'MAC ADDRESS' : 'USERNAME'),
+                      _buildFormInput(
+                        _usernameController,
+                        _portalSourceType == PlaylistSourceType.stalker ? '00:1A:79:XX:XX:XX' : 'Enter username',
+                        isMono: _portalSourceType == PlaylistSourceType.stalker,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_portalSourceType == PlaylistSourceType.xtreamCodes) ...[
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFormLabel('PASSWORD / PIN'),
+                        _buildFormInput(_passwordController, 'Enter password or PIN', isPassword: true),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+          Row(
+            children: [
+              ElevatedButton(
+                onPressed: _submitPortalForm,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4A4A4A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(isEdit ? 'Save Changes' : 'Save Changes', style: const TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(
+                onPressed: () => setState(() => _activeTab = VortexSettingsTab.playlistsManager),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFCCCCCC),
+                  side: const BorderSide(color: Color(0xFF33333F)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPortalTypeRadio(String label, PlaylistSourceType type) {
+    final isSelected = _portalSourceType == type;
+
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _portalSourceType = type),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : const Color(0xFF17171D),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? Colors.white : const Color(0xFF282834),
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.black : const Color(0xFFCCCCCC),
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Color(0xFF9E9EA8),
+          fontSize: 10.5,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormInput(
+    TextEditingController controller,
+    String hint, {
+    bool isPassword = false,
+    bool isMono = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF181820),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2C2C3A)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 13.5,
+          fontFamily: isMono ? 'monospace' : null,
+        ),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Color(0xFF666672), fontSize: 13),
+          border: InputBorder.none,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
     );
   }
 
