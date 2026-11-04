@@ -70,6 +70,24 @@ class PlaylistImporterService {
     );
 
     try {
+      // Auto-detect and convert Xtream get.php M3U URLs to full Xtream Codes API
+      if (playlist.sourceType == PlaylistSourceType.m3u &&
+          playlist.url.contains('get.php') &&
+          playlist.url.contains('username=') &&
+          playlist.url.contains('password=')) {
+        try {
+          final uri = Uri.parse(playlist.url);
+          final user = uri.queryParameters['username'];
+          final pass = uri.queryParameters['password'];
+          if (user != null && pass != null) {
+            playlist.sourceType = PlaylistSourceType.xtreamCodes;
+            playlist.url = '${uri.scheme}://${uri.host}${uri.hasPort ? ":${uri.port}" : ""}';
+            playlist.username = user;
+            playlist.password = pass;
+          }
+        } catch (_) {}
+      }
+
       List<Channel> channels = [];
 
       if (playlist.isStalker) {

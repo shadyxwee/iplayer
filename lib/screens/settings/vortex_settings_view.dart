@@ -164,15 +164,16 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
   Future<void> _toggleFavorite(String category) async {
     final isFav = _favoriteCategories.contains(category);
     await PreferencesService.toggleFavoriteCategory(category);
-    setState(() {
-      if (isFav) {
-        _favoriteCategories.remove(category);
-      } else {
-        _favoriteCategories.add(category);
-      }
-    });
+    if (mounted) {
+      setState(() {
+        if (isFav) {
+          _favoriteCategories.remove(category);
+        } else {
+          _favoriteCategories.add(category);
+        }
+      });
+    }
     VortexTubeService.invalidateCache();
-    widget.onDataChanged();
   }
 
   Future<void> _resetAllFavoriteCategories() async {
@@ -180,11 +181,12 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
     for (final cat in allFavs) {
       await PreferencesService.toggleFavoriteCategory(cat);
     }
-    setState(() {
-      _favoriteCategories.clear();
-    });
+    if (mounted) {
+      setState(() {
+        _favoriteCategories.clear();
+      });
+    }
     VortexTubeService.invalidateCache();
-    widget.onDataChanged();
   }
 
   Future<void> _setActivePlaylist(Playlist playlist) async {
@@ -221,14 +223,21 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
 
     if (confirmed == true && mounted) {
       await DatabaseService.deletePlaylist(playlist.id);
+      final remaining = await DatabaseService.getAllPlaylists();
       final activeId = await PreferencesService.getActivePlaylistId();
       if (activeId == playlist.id) {
-        final remaining = await DatabaseService.getAllPlaylists();
         if (remaining.isNotEmpty) {
           await PreferencesService.setActivePlaylistId(remaining.first.id);
         } else {
           await PreferencesService.setActivePlaylistId(null);
         }
+      }
+      if (remaining.isEmpty) {
+        final allFavs = await PreferencesService.getFavoriteCategories();
+        for (final fav in allFavs) {
+          await PreferencesService.toggleFavoriteCategory(fav);
+        }
+        _favoriteCategories.clear();
       }
       VortexTubeService.invalidateCache();
       await _loadSettingsData();
@@ -756,90 +765,95 @@ class _VortexSettingsViewState extends State<VortexSettingsView> {
                     style: TextStyle(color: Color(0xFF888894), fontSize: 13),
                   ),
                 )
-              : GridView.builder(
-                  key: ValueKey('grid_${_activeCatGroup.name}'),
-                  controller: _rightScrollController,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 3.8,
-                  ),
-                  itemCount: sortedCatEntries.length,
-                  itemBuilder: (context, idx) {
-                    final entry = sortedCatEntries[idx];
-                    final catName = entry.key;
-                    final count = entry.value;
-                    final isSelected = _favoriteCategories.contains(catName);
-
-                    return InkWell(
-                      onTap: () => _toggleFavorite(catName),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF17171D),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF4A4A5A) : const Color(0xFF242430),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF33333D) : const Color(0xFF21212A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isSelected ? const Color(0xFF4A4A4A) : const Color(0xFF2C2C38),
-                                ),
-                              ),
-                              child: Icon(
-                                defaultIcon,
-                                color: isSelected ? Colors.white : const Color(0xFF8D8D9B),
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    catName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    '$count items',
-                                    style: const TextStyle(color: Color(0xFF8D8D9B), fontSize: 11),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isSelected ? const Color(0xFF4A4A4A) : Colors.transparent,
-                                border: isSelected ? null : Border.all(color: const Color(0xFF3B3B4A)),
-                              ),
-                              child: isSelected
-                                  ? const Icon(Icons.check, color: Colors.white, size: 15)
-                                  : null,
-                            ),
-                          ],
-                        ),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final int cols = constraints.maxWidth > 900 ? 4 : 3;
+                    return GridView.builder(
+                      key: ValueKey('grid_${_activeCatGroup.name}'),
+                      controller: _rightScrollController,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 2.8,
                       ),
+                      itemCount: sortedCatEntries.length,
+                      itemBuilder: (context, idx) {
+                        final entry = sortedCatEntries[idx];
+                        final catName = entry.key;
+                        final count = entry.value;
+                        final isSelected = _favoriteCategories.contains(catName);
+
+                        return InkWell(
+                          onTap: () => _toggleFavorite(catName),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF17171D),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF4A4A5A) : const Color(0xFF242430),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFF33333D) : const Color(0xFF21212A),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected ? const Color(0xFF4A4A4A) : const Color(0xFF2C2C38),
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    defaultIcon,
+                                    color: isSelected ? Colors.white : const Color(0xFF8D8D9B),
+                                    size: 15,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        catName,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '$count items',
+                                        style: const TextStyle(color: Color(0xFF8D8D9B), fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isSelected ? const Color(0xFF4A4A4A) : Colors.transparent,
+                                    border: isSelected ? null : Border.all(color: const Color(0xFF3B3B4A)),
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(Icons.check, color: Colors.white, size: 13)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),

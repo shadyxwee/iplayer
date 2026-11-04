@@ -935,6 +935,17 @@ class _VortexTubeScreenState extends State<VortexTubeScreen> {
                       });
                       _selectNavTarget(target);
                     },
+                    onForceRefresh: () {
+                      _cachedAllChannels = null;
+                      VortexTubeService.invalidateCache();
+                      _loadInitialData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Feed refreshed!'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
                   ),
                   Expanded(
                     child: Column(

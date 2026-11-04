@@ -14,6 +14,7 @@ class VortexSidebar extends StatelessWidget {
   final VoidCallback onMouseExit;
   final ValueChanged<VortexNavTarget> onSelectNavTarget;
   final void Function(int navIndex, VortexNavTarget target) onSidebarTap;
+  final VoidCallback? onForceRefresh;
 
   const VortexSidebar({
     super.key,
@@ -28,6 +29,7 @@ class VortexSidebar extends StatelessWidget {
     required this.onMouseExit,
     required this.onSelectNavTarget,
     required this.onSidebarTap,
+    this.onForceRefresh,
   });
 
   @override
@@ -142,6 +144,41 @@ class VortexSidebar extends StatelessWidget {
                 ),
               ),
             ),
+
+            // Force Refresh Button (Right above the profile box)
+            if (onForceRefresh != null)
+              Container(
+                margin: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 4),
+                child: Tooltip(
+                  message: 'Force Refresh Content',
+                  child: InkWell(
+                    onTap: onForceRefresh,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      height: 38,
+                      padding: EdgeInsets.symmetric(horizontal: isSidebarExpanded ? 14 : 0),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF191919),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF282828)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: isSidebarExpanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.refresh_rounded, color: Color(0xFFAAAAAA), size: 18),
+                          if (isSidebarExpanded) ...[
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Force Refresh',
+                              style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
 
             // User Profile Box at bottom
             Container(

@@ -8,7 +8,6 @@ import 'package:riptv/screens/movies/vortex_movies_view.dart';
 import 'package:riptv/screens/series/vortex_series_view.dart';
 import 'package:riptv/screens/settings/vortex_settings_view.dart';
 import 'package:riptv/screens/sidebar/vortex_nav_types.dart';
-import 'package:riptv/screens/sidebar/vortex_sidebar.dart';
 import 'package:riptv/screens/search/vortex_search_bar.dart';
 
 void main() {
