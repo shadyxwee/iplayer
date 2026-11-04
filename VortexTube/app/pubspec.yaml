@@ -1,0 +1,35 @@
+name: vortextube
+description: "VortexTube - Dedicated Android TV IPTV Application with Rust Core"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State & Persistence
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+
+  # Networking
+  http: ^1.1.0
+  dio: ^5.4.0
+
+  # FFI Bridge with Rust
+  ffi: ^2.1.2
+
+  # Media & Icons
+  flutter_svg: ^2.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true

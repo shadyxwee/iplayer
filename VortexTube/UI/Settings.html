@@ -1,0 +1,173 @@
+<!DOCTYPE html><html lang="en" style="width: 1280px; height: 1024px; overflow: hidden; position: relative;"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Settings &amp; VortexTube - TV OS Edition</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            appDark: '#0a0a0c',
+            panelDark: '#121215',
+            cardDark: '#17171c',
+            cardHover: '#212127',
+            borderDark: '#26262e',
+            brandRed: '#e50914',
+            accentRed: '#ff0033',
+            subtext: '#858592',
+          },
+          boxShadow: {
+            tvGlow: '0 0 25px -4px rgba(229, 9, 20, 0.45)',
+            cardActive: '0 0 0 2px #ff0033, 0 8px 24px rgba(255, 0, 51, 0.25)',
+            btnFocus: '0 0 0 3px #ffffff, 0 0 20px rgba(255, 255, 255, 0.4)',
+            whiteFocus: '0 0 0 3px #ffffff, 0 8px 24px rgba(255, 255, 255, 0.25)',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-styling">
+    body {
+      background-color: #0b0b0e;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow-x: hidden;
+      user-select: none;
+    }
+    .tv-focusable {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+    }
+    .tv-focusable:focus-visible,
+    .tv-nav-item.active {
+      outline: none;
+    }
+    .tv-pane-active {
+      background-color: #ffffff !important;
+      color: #000000 !important;
+      box-shadow: 0 0 0 3px #ffffff, 0 8px 24px rgba(255, 255, 255, 0.3) !important;
+      transform: scale(1.012);
+      border-color: #ffffff !important;
+    }
+    .tv-pane-active * {
+      color: #000000 !important;
+      border-color: rgba(0, 0, 0, 0.2) !important;
+    }
+    .tv-pane-active svg {
+      fill: currentColor;
+    }
+    .tv-pane-active .badge-tag {
+      background-color: #e5e5e5 !important;
+      color: #111111 !important;
+      border-color: #cccccc !important;
+    }
+    .tv-pane-active .action-btn {
+      background-color: #000000 !important;
+      color: #ffffff !important;
+      border-color: #000000 !important;
+    }
+    .tv-pane-active .action-btn * {
+      color: #ffffff !important;
+    }
+    .tv-pane-active .cat-icon {
+      background-color: #e5e5ea !important;
+      color: #000000 !important;
+      border-color: #d1d1d6 !important;
+    }
+    .tv-pane-active .selection-check-bg {
+      background-color: #000000 !important;
+    }
+    .tv-pane-active .selection-check-bg svg {
+      color: #ffffff !important;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #121216;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #2a2a35;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #e50914;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-[#0b0b0e] text-white flex flex-col justify-between p-6 lg:p-10 select-none">
+<div class="w-full max-w-[1520px] mx-auto flex flex-col flex-1">
+<header class="flex items-center justify-between pb-6 mb-6 border-b border-[#1f1f26]" data-purpose="main-header">
+<div class="flex items-center gap-4">
+<div class="relative flex items-center justify-center"><div class="absolute -inset-1 bg-white/20 rounded-full blur-md"></div>
+<svg aria-hidden="true" class="w-9 h-9 text-white fill-current relative drop-shadow" viewBox="0 0 24 24">
+<path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"></path>
+</svg></div>
+<div>
+<div class="flex items-center gap-2">
+<h1 class="text-2xl lg:text-3xl font-black tracking-tight text-white flex items-center gap-2.5">
+<span class="">Settings</span>
+</h1>
+</div>
+</div>
+</div>
+</header>
+<div class="grid grid-cols-12 gap-8 flex-1 min-h-[580px]">
+<aside aria-label="Settings Categories" class="col-span-12 md:col-span-4 lg:col-span-4 flex flex-col gap-2.5">
+<div class="text-[11px] font-bold uppercase tracking-widest text-[#727282] px-2 mb-1 flex items-center justify-between">
+<span class="">Categories</span>
+<span class="text-[10px] text-neutral-500 font-normal">D-PAD ▲ ▼</span>
+</div>
+<nav class="flex flex-col gap-2.5" id="nav-category-list" role="tablist">
+<button class="tv-nav-item tv-focusable group relative w-full flex items-center justify-between px-5 py-4 rounded-xl text-left border-[#23232b] bg-[#141418] text-white border" data-target="panel-add-vortextube" role="tab" tabindex="0" type="button">
+<div class="flex items-center gap-3.5">
+<span class="material-symbols-outlined text-2xl tab-icon text-[#8d8d9b]">favorite</span>
+<div>
+<div class="text-[15px] font-bold tracking-tight tab-title text-neutral-200">Add to VortexTube</div>
+<div class="text-[12px] tab-subtitle text-neutral-500">Pins, favorites &amp; shelf feeds</div>
+</div>
+</div>
+<span class="font-bold text-lg tab-chevron text-neutral-500">&gt;</span>
+</button>
+<div class="flex flex-col gap-1.5" id="nav-wrapper-playlists">
+<button class="tv-nav-item tv-focusable group relative w-full flex items-center justify-between px-5 py-4 rounded-xl text-left border-[#23232b] bg-[#141418] text-white border" data-target="panel-playlists-manager" id="nav-item-playlists" role="tab" tabindex="0" type="button">
+<div class="flex items-center gap-3.5">
+<span class="material-symbols-outlined text-2xl tab-icon text-[#8d8d9b]">playlist_play</span>
+<div>
+<div class="text-[15px] font-bold tracking-tight tab-title text-neutral-200">Playlists Manager</div>
+<div class="text-[12px] tab-subtitle text-neutral-500">Active accounts &amp; source switches</div>
+</div>
+</div>
+<span class="font-bold text-lg tab-chevron text-neutral-500">&gt;</span>
+</button>
+</div>
+<button class="tv-nav-item tv-focusable group relative w-full flex items-center justify-between px-5 py-4 rounded-xl text-left border-[#23232b] bg-[#141418] text-white border" data-target="panel-epg-guide" role="tab" tabindex="0" type="button">
+<div class="flex items-center gap-3.5">
+<span class="material-symbols-outlined text-2xl tab-icon text-[#8d8d9b]">calendar_month</span>
+<div>
+<div class="text-[15px] font-bold tracking-tight tab-title text-neutral-200">EPG &amp; TV Guide</div>
+<div class="text-[12px] tab-subtitle text-neutral-500">XMLTV sync, timezone &amp; catchup</div>
+</div>
+</div>
+<span class="font-bold text-lg tab-chevron text-neutral-500">&gt;</span>
+</button>
+<button class="tv-nav-item tv-focusable group relative w-full flex items-center justify-between px-5 py-4 rounded-xl text-left active bg-white text-black shadow-lg" data-target="panel-system-about" role="tab" tabindex="0" type="button">
+<div class="flex items-center gap-3.5">
+<span class="material-symbols-outlined text-2xl tab-icon text-black">info</span>
+<div>
+<div class="text-[15px] font-bold tracking-tight tab-title text-black">About VortexTube</div>
+<div class="text-[12px] tab-subtitle text-neutral-700">Developer &amp; App updates</div>
+</div>
+</div>
+<span class="font-bold text-lg tab-chevron text-black">&gt;</span>
+</button>
+</nav>
+</aside>
+<section class="col-span-12 md:col-span-8 lg:col-span-8 bg-[#121216] border border-[#22222a] rounded-2xl p-6 lg:p-7 relative overflow-hidden flex flex-col justify-between custom-scrollbar overflow-y-auto">
+</section>
+</div>
+</div>
+</body></html>
