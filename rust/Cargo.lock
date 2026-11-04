@@ -1458,6 +1458,7 @@ dependencies = [
  "md-5",
  "parking_lot",
  "quick-xml",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",
@@ -1466,6 +1467,7 @@ dependencies = [
  "sha2",
  "thiserror",
  "tokio",
+ "url",
 ]
 
 [[package]]

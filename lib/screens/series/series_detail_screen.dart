@@ -83,10 +83,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
        final stalkerService = StalkerService(
          portalUrl: currentPlaylist.url,
          macAddress: currentPlaylist.macAddress ?? '00:1A:79:00:00:00',
-         serialNumber: currentPlaylist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
-         deviceId: currentPlaylist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
-         deviceId2: currentPlaylist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
-         signature: currentPlaylist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
+         serialNumber: currentPlaylist.serialNumber,
+         deviceId: currentPlaylist.deviceId,
+         deviceId2: currentPlaylist.deviceId2,
+         signature: currentPlaylist.signature,
        );
        meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
        try {

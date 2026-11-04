@@ -169,14 +169,31 @@ class StalkerService {
     return dedup;
   }
 
-  /// Build Cookie string matching Advanced Mode specification
+  /// Resolve real serial and device_id (prevent using literal "DEFAULT" strings)
+  (String, String) _resolveHardwareIds(StalkerSignatures sig) {
+    final sn = (serialNumber != null &&
+            serialNumber!.trim().isNotEmpty &&
+            !serialNumber!.contains('DEFAULT'))
+        ? serialNumber!
+        : sig.sncut;
+
+    final dev = (deviceId != null &&
+            deviceId!.trim().isNotEmpty &&
+            !deviceId!.contains('DEFAULT'))
+        ? deviceId!
+        : sig.devenc;
+
+    return (sn, dev);
+  }
+
+  /// Build Cookie string matching Vortex IPTV Suite specifications
   String _buildCookieString([String? tok]) {
     final t = tok ?? _token ?? '';
+    final sig = StalkerSignatures.calculate(macAddress);
+    final (sn, dev) = _resolveHardwareIds(sig);
+
     if (useAdvanced) {
-      final sig = StalkerSignatures.calculate(macAddress);
-      final sn = serialNumber?.isNotEmpty == true ? serialNumber! : sig.sncut;
-      final devId = deviceId?.isNotEmpty == true ? deviceId! : sig.devenc;
-      return 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone; token=$t; adid=${sig.adid}; debug=1; device_id2=$devId; device_id=$devId; hw_version=1.7-BD-00; sn=$sn';
+      return 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone; token=$t; adid=${sig.adid}; debug=1; device_id2=$dev; device_id=$dev; hw_version=1.7-BD-00; sn=$sn';
     }
     return 'mac=$macAddress; stb_lang=$stbLang; timezone=$timezone; token=$t';
   }
@@ -239,14 +256,15 @@ class StalkerService {
           final postHeaders = Map<String, String>.from(headers);
           postHeaders['Content-Type'] = 'application/x-www-form-urlencoded; charset=utf-8';
           final sig = StalkerSignatures.calculate(macAddress);
+          final (sn, dev) = _resolveHardwareIds(sig);
           final postBody = {
             'type': 'stb',
             'action': 'handshake',
             'JsHttpRequest': '1-xml',
-            'sn': serialNumber?.isNotEmpty == true ? serialNumber! : sig.sncut,
-            'id1': deviceId?.isNotEmpty == true ? deviceId! : sig.devenc,
+            'sn': sn,
+            'id1': dev,
           };
-          final postRes = await http.post(Uri.parse(endpoint), headers: postHeaders, body: postBody).timeout(const Duration(seconds: 8));
+          final postRes = await http.post(Uri.parse(endpoint), headers: postHeaders, body: postBody).timeout(const Duration(seconds: 6));
           if (postRes.statusCode == 200) {
             extractedToken = _extractToken(postRes.body);
           }
@@ -388,17 +406,34 @@ class StalkerService {
   Future<Map<String, String>> getLiveCategories() async {
     final categories = <String, String>{};
     try {
-      final data = await request({'type': 'itv', 'action': 'get_genres'});
+      final res = await request({'type': 'itv', 'action': 'get_genres'});
+      dynamic data = res;
+      if (data is Map && data.containsKey('data')) {
+        data = data['data'];
+      }
       if (data is List) {
         for (var item in data) {
           if (item is Map) {
-            final id = item['id']?.toString() ?? '';
-            final title = item['title']?.toString() ?? 'Unknown';
+            final id = item['id']?.toString() ?? item['category_id']?.toString() ?? '';
+            final title = item['title']?.toString() ?? item['category_name']?.toString() ?? 'Unknown';
             if (id.isNotEmpty) {
               categories[id] = title;
             }
           }
         }
+      } else if (data is Map) {
+        // Stalker portals often return map keyed by category ID
+        data.forEach((key, val) {
+          if (val is Map) {
+            final id = val['id']?.toString() ?? val['category_id']?.toString() ?? key.toString();
+            final title = val['title']?.toString() ?? val['category_name']?.toString() ?? 'Unknown';
+            if (id.isNotEmpty) {
+              categories[id] = title;
+            }
+          } else if (val is String) {
+            categories[key.toString()] = val;
+          }
+        });
       }
     } catch (_) {}
     return categories;
@@ -408,17 +443,33 @@ class StalkerService {
   Future<Map<String, String>> getVodCategories() async {
     final categories = <String, String>{};
     try {
-      final data = await request({'type': 'vod', 'action': 'get_categories'});
+      final res = await request({'type': 'vod', 'action': 'get_categories'});
+      dynamic data = res;
+      if (data is Map && data.containsKey('data')) {
+        data = data['data'];
+      }
       if (data is List) {
         for (var item in data) {
           if (item is Map) {
-            final id = item['id']?.toString() ?? '';
+            final id = item['id']?.toString() ?? item['category_id']?.toString() ?? '';
             final title = item['title']?.toString() ?? item['category_name']?.toString() ?? 'Unknown';
             if (id.isNotEmpty) {
               categories[id] = title;
             }
           }
         }
+      } else if (data is Map) {
+        data.forEach((key, val) {
+          if (val is Map) {
+            final id = val['id']?.toString() ?? val['category_id']?.toString() ?? key.toString();
+            final title = val['title']?.toString() ?? val['category_name']?.toString() ?? 'Unknown';
+            if (id.isNotEmpty) {
+              categories[id] = title;
+            }
+          } else if (val is String) {
+            categories[key.toString()] = val;
+          }
+        });
       }
     } catch (_) {}
     return categories;
@@ -428,17 +479,33 @@ class StalkerService {
   Future<Map<String, String>> getSeriesCategories() async {
     final categories = <String, String>{};
     try {
-      final data = await request({'type': 'series', 'action': 'get_categories'});
+      final res = await request({'type': 'series', 'action': 'get_categories'});
+      dynamic data = res;
+      if (data is Map && data.containsKey('data')) {
+        data = data['data'];
+      }
       if (data is List) {
         for (var item in data) {
           if (item is Map) {
-            final id = item['id']?.toString() ?? '';
+            final id = item['id']?.toString() ?? item['category_id']?.toString() ?? '';
             final title = item['title']?.toString() ?? item['category_name']?.toString() ?? 'Unknown';
             if (id.isNotEmpty) {
               categories[id] = title;
             }
           }
         }
+      } else if (data is Map) {
+        data.forEach((key, val) {
+          if (val is Map) {
+            final id = val['id']?.toString() ?? val['category_id']?.toString() ?? key.toString();
+            final title = val['title']?.toString() ?? val['category_name']?.toString() ?? 'Unknown';
+            if (id.isNotEmpty) {
+              categories[id] = title;
+            }
+          } else if (val is String) {
+            categories[key.toString()] = val;
+          }
+        });
       }
     } catch (_) {}
     return categories;
