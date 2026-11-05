@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/series.dart';
-import '../models/series_item.dart';
-import '../models/media_metadata.dart';
-import '../models/channel.dart';
-import '../models/playlist.dart';
-import '../services/metadata_service.dart';
-import '../services/database_service.dart';
-import '../services/stalker_service.dart';
-import '../services/xtream_service.dart';
-import 'video_player_screen.dart';
-import 'mobile_video_player_screen.dart';
+import '../../models/series.dart';
+import '../../models/series_item.dart';
+import '../../models/media_metadata.dart';
+import '../../models/channel.dart';
+import '../../models/playlist.dart';
+import '../../services/metadata_service.dart';
+import '../../services/database_service.dart';
+import '../../services/series_parser.dart';
+import '../../services/stalker_service.dart';
+import '../../services/xtream_service.dart';
+import '../player/video_player_screen.dart';
+import '../player/mobile_video_player_screen.dart';
 import 'dart:io' show Platform;
 
 class SeriesDetailScreen extends StatefulWidget {
@@ -82,10 +83,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
        final stalkerService = StalkerService(
          portalUrl: currentPlaylist.url,
          macAddress: currentPlaylist.macAddress ?? '00:1A:79:00:00:00',
-         serialNumber: currentPlaylist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
-         deviceId: currentPlaylist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
-         deviceId2: currentPlaylist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
-         signature: currentPlaylist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
+         serialNumber: currentPlaylist.serialNumber,
+         deviceId: currentPlaylist.deviceId,
+         deviceId2: currentPlaylist.deviceId2,
+         signature: currentPlaylist.signature,
        );
        meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
        try {
@@ -128,6 +129,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
        }
     } else {
        meta = await MetadataService.resolveChannelMetadata(widget.series.name, false);
+       // Load all M3U episode channels for this series from the database
+       final allChannels = await DatabaseService.getAllChannels();
+       final m3uSeriesGroup = SeriesParser.groupIntoSeries(allChannels);
+       // Match by name or series id
+       final matched = m3uSeriesGroup.values.firstWhere(
+         (s) => s.name.toLowerCase() == widget.series.name.toLowerCase() ||
+                (s.id != null && s.id == widget.series.id),
+         orElse: () => widget.series,
+       );
+       if (matched.seasons.isNotEmpty && widget.series.seasons.isEmpty) {
+         widget.series.seasons.addAll(matched.seasons);
+       }
     }
 
     if (mounted) {
@@ -321,9 +334,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   Widget build(BuildContext context) {
     // Normalizing seasons and episodes
     final dynamic seasonsRaw = _seriesData?['seasons'];
+    final dynamic episodesRaw = _seriesData?['episodes'];
     List seasons = [];
     if (seasonsRaw is List) {
       seasons = seasonsRaw;
+    } else if (episodesRaw is Map) {
+      seasons = episodesRaw.keys.map((k) => {'season_number': k.toString()}).toList()
+        ..sort((a, b) => (int.tryParse(a['season_number'] ?? '0') ?? 0)
+            .compareTo(int.tryParse(b['season_number'] ?? '0') ?? 0));
     } else if (widget.series.seasons.isNotEmpty) {
       seasons = widget.series.seasons.map((s) => {'season_number': s.seasonNumber}).toList();
     }
@@ -332,7 +350,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       _selectedSeason = (seasons.first['season_number'] ?? '1').toString();
     }
 
-    final dynamic episodesRaw = _seriesData?['episodes'];
     List currentEpisodes = [];
     if (_selectedSeason != null) {
       if (episodesRaw != null) {

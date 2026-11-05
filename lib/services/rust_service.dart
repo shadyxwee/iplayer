@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../models/channel.dart';
+import 'stalker_service.dart';
 
 /// Dart wrapper service for the Rust Core Engine.
 /// Operates off-thread and manages SQLite FTS5, M3U fast parsing,
@@ -13,7 +14,7 @@ class RustService {
 
     try {
       _initialized = true;
-    } catch (e) {
+    } catch (_) {
       // Fallback
     }
   }
@@ -72,20 +73,40 @@ class RustService {
   }
 
   /// Stalker / MAC portal handshake and stream link generator.
+  /// Complies with Advanced Mode cryptographic hardware fingerprinting.
   static Future<Map<String, String>> getStalkerStreamHeaders(
     String portalUrl,
     String macAddress, {
     String? token,
+    bool useAdvanced = true,
+    String? serialNumber,
+    String? deviceId,
   }) async {
-    final baseUrl = portalUrl.replaceAll(RegExp(r'/$'), '');
+    final baseUrl = StalkerService.normalizeUrl(portalUrl);
+    final cleanMac = StalkerService.formatMac(macAddress);
+
+    String cookieStr;
+    if (useAdvanced) {
+      final sig = StalkerSignatures.calculate(cleanMac);
+      final sn = serialNumber?.isNotEmpty == true ? serialNumber! : sig.sncut;
+      final devId = deviceId?.isNotEmpty == true ? deviceId! : sig.devenc;
+      cookieStr =
+          'mac=$cleanMac; stb_lang=en; timezone=Asia%20Shanghai; token=${token ?? ""}; adid=${sig.adid}; debug=1; device_id2=$devId; device_id=$devId; hw_version=1.7-BD-00; sn=$sn';
+    } else {
+      cookieStr = 'mac=$cleanMac; stb_lang=en; timezone=Asia%20Shanghai; token=${token ?? ""}';
+    }
+
     final headers = {
       'User-Agent':
-          'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
-      'Cookie': 'mac=$macAddress; stb_lang=en; timezone=Europe/London${token != null ? "; token=$token" : ""}',
+          'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 1812  Safari/533.3',
+      'Cookie': cookieStr,
       'Referer': '$baseUrl/c/',
       'Connection': 'Keep-Alive',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.5',
       'Accept-Encoding': 'gzip',
     };
+
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }

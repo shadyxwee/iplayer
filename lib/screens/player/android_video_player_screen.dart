@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
-import '../models/channel.dart';
-import '../services/database_service.dart';
-import '../l10n/app_localizations.dart';
+import '../../models/channel.dart';
+import '../../services/database_service.dart';
+import '../../l10n/app_localizations.dart';
 
 class AndroidVideoPlayerScreen extends StatefulWidget {
   final Channel channel;

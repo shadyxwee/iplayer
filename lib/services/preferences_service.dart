@@ -12,9 +12,13 @@ class PreferencesService {
     return prefs.getInt(_activePlaylistIdKey);
   }
 
-  static Future<void> setActivePlaylistId(int id) async {
+  static Future<void> setActivePlaylistId(int? id) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_activePlaylistIdKey, id);
+    if (id == null) {
+      await prefs.remove(_activePlaylistIdKey);
+    } else {
+      await prefs.setInt(_activePlaylistIdKey, id);
+    }
   }
 
   static Future<String?> getTmdbApiKey() async {

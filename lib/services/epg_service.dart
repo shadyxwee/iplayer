@@ -97,7 +97,7 @@ class EpgService {
           Uri.parse(epgUrl),
           headers: {
             'Accept': 'application/xml, text/xml, */*',
-            'User-Agent': 'RIPTV/1.0',
+            'User-Agent': 'VortexTube/1.0',
           },
         ).timeout(const Duration(seconds: 120));
 

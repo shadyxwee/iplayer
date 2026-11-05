@@ -94,10 +94,10 @@ class _PlaylistManagerScreenState extends State<PlaylistManagerScreen> {
         final service = StalkerService(
           portalUrl: playlist.url,
           macAddress: playlist.macAddress ?? '00:1A:79:00:00:00',
-          serialNumber: playlist.serialNumber ?? 'MAG254_SERIAL_DEFAULT',
-          deviceId: playlist.deviceId ?? 'MAG254_DEVICE_ID_DEFAULT',
-          deviceId2: playlist.deviceId2 ?? 'MAG254_DEVICE_ID2_DEFAULT',
-          signature: playlist.signature ?? 'MAG254_SIGNATURE_DEFAULT',
+          serialNumber: playlist.serialNumber ?? null,
+          deviceId: playlist.deviceId ?? null,
+          deviceId2: playlist.deviceId2 ?? null,
+          signature: playlist.signature ?? null,
         );
 
         // Fetch LIVE CHANNELS
@@ -1310,8 +1310,8 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
       final service = StalkerService(
         portalUrl: url,
         macAddress: mac,
-        serialNumber: _serialController.text.trim().isNotEmpty ? _serialController.text.trim() : 'MAG254_SERIAL_DEFAULT',
-        deviceId: _deviceIdController.text.trim().isNotEmpty ? _deviceIdController.text.trim() : 'MAG254_DEVICE_ID_DEFAULT',
+        serialNumber: _serialController.text.trim().isNotEmpty ? _serialController.text.trim() : null,
+        deviceId: _deviceIdController.text.trim().isNotEmpty ? _deviceIdController.text.trim() : null,
       );
 
       final result = await service.checkMac();
@@ -1630,7 +1630,7 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
                   _buildTextField(
                     controller: _serialController,
                     label: 'Serial Number',
-                    hint: 'MAG254_SERIAL_DEFAULT',
+                    hint: null,
                     icon: Icons.confirmation_number_outlined,
                     theme: theme,
                   ),
@@ -1638,7 +1638,7 @@ class _PlaylistDialogState extends State<PlaylistDialog> {
                   _buildTextField(
                     controller: _deviceIdController,
                     label: 'Device ID',
-                    hint: 'MAG254_DEVICE_ID_DEFAULT',
+                    hint: null,
                     icon: Icons.devices,
                     theme: theme,
                   ),

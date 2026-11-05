@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/channel.dart';
-import '../models/playlist.dart';
-import '../services/database_service.dart';
-import '../services/config_service.dart';
-import '../l10n/app_localizations.dart';
-import '../providers/theme_provider.dart';
-import '../services/preferences_service.dart';
-import 'playlist_manager_screen.dart';
+import '../../models/channel.dart';
+import '../../models/playlist.dart';
+import '../../services/database_service.dart';
+import '../../services/config_service.dart';
+import '../../l10n/app_localizations.dart';
+import '../../providers/theme_provider.dart';
+import '../../services/preferences_service.dart';
+import '../playlist_manager_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final int initialTabIndex;
