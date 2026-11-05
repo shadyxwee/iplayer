@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VortexTube - Highly Personalized IPTV Player</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0F0F0F;
+      color: #FFFFFF;
+      user-select: none;
+      overflow: hidden;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #121216;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #282834;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3E3E4E;
+    }
+    .poster-ratio {
+      aspect-ratio: 2 / 3;
+    }
+    .smooth-transition {
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col antialiased">
+
+  <!-- Main Container -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- 1. LEFT COLLAPSIBLE SIDEBAR -->
+    <aside id="sidebar" class="h-full bg-[#141416] border-r border-[#1F1F24] flex flex-col justify-between py-6 px-4 z-40 smooth-transition w-64">
+      <!-- Top Brand & Nav -->
+      <div class="flex flex-col gap-6">
+        <!-- Logo Area -->
+        <div class="flex items-center gap-3 px-2 cursor-pointer" onclick="navigate('home')">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#FF0033] to-[#FF4B4B] flex items-center justify-center shadow-lg shadow-red-900/30">
+            <i class="fa-solid fa-play text-white text-base ml-0.5"></i>
+          </div>
+          <div class="sidebar-text overflow-hidden whitespace-nowrap">
+            <span class="text-xl font-black tracking-tight text-white">Vortex<span class="text-[#FF0033]">Tube</span></span>
+          </div>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="flex flex-col gap-1.5 mt-2">
+          <!-- Search -->
+          <button id="nav-search" onclick="focusSearch()" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl text-[#9E9EA8] hover:text-white hover:bg-[#1C1C22] smooth-transition">
+            <i class="fa-solid fa-magnifying-glass text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-semibold text-sm">Search</span>
+          </button>
+          <!-- Home -->
+          <button id="nav-home" onclick="navigate('home')" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl bg-[#EEEEEE] text-black font-bold shadow-md smooth-transition">
+            <i class="fa-solid fa-house text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-bold text-sm">Home</span>
+          </button>
+          <!-- Movies -->
+          <button id="nav-movies" onclick="navigate('movies')" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl text-[#9E9EA8] hover:text-white hover:bg-[#1C1C22] smooth-transition">
+            <i class="fa-solid fa-film text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-semibold text-sm">Movies</span>
+          </button>
+          <!-- Live TV -->
+          <button id="nav-liveTv" onclick="navigate('liveTv')" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl text-[#9E9EA8] hover:text-white hover:bg-[#1C1C22] smooth-transition">
+            <i class="fa-solid fa-tv text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-semibold text-sm">Live TV</span>
+          </button>
+          <!-- Series -->
+          <button id="nav-series" onclick="navigate('series')" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl text-[#9E9EA8] hover:text-white hover:bg-[#1C1C22] smooth-transition">
+            <i class="fa-solid fa-clapperboard text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-semibold text-sm">Series</span>
+          </button>
+          <!-- Settings -->
+          <button id="nav-settings" onclick="navigate('settings')" class="nav-item flex items-center gap-4 px-3.5 py-3 rounded-xl text-[#9E9EA8] hover:text-white hover:bg-[#1C1C22] smooth-transition">
+            <i class="fa-solid fa-gear text-lg w-6 text-center"></i>
+            <span class="sidebar-text font-semibold text-sm">Settings</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Bottom Profile & Force Refresh -->
+      <div class="flex flex-col gap-2">
+        <button onclick="forceRefresh()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1B1B22] hover:bg-[#252530] text-[#CCCCCC] hover:text-white text-xs font-semibold smooth-transition">
+          <i class="fa-solid fa-arrows-rotate text-sm w-5 text-center text-[#FF4B4B]"></i>
+          <span class="sidebar-text">Force Refresh</span>
+        </button>
+
+        <!-- Active Profile Card -->
+        <div class="flex items-center gap-3 p-2.5 rounded-xl bg-[#1B1B22] border border-[#262632]">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+            IPTV
+          </div>
+          <div class="sidebar-text overflow-hidden">
+            <div class="text-xs font-bold truncate">Premium Portal</div>
+            <div class="text-[10px] text-emerald-400 font-medium">● Connected</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN CONTENT VIEWPORT -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-[#0F0F0F]">
+
+      <!-- TOP HEADER (Hidden when on Settings page or Video Player) -->
+      <header id="top-header" class="h-16 px-8 flex items-center justify-between border-b border-[#1A1A1F] bg-[#0F0F0F]/80 backdrop-blur z-20">
+        <div class="flex items-center gap-4">
+          <!-- Toggle Sidebar Button -->
+          <button onclick="toggleSidebar()" class="w-9 h-9 rounded-lg bg-[#1C1C1F] hover:bg-[#282830] text-[#A0A0AD] hover:text-white flex items-center justify-center smooth-transition">
+            <i class="fa-solid fa-bars text-sm"></i>
+          </button>
+
+          <!-- Search Capsule -->
+          <div class="flex items-center bg-[#24242A] border border-[#303038] rounded-full px-3.5 py-1.5 w-80 focus-within:border-white smooth-transition">
+            <i class="fa-solid fa-magnifying-glass text-[#80808E] text-xs mr-2.5"></i>
+            <input id="main-search-input" type="text" placeholder="Search VortexTube..." class="bg-transparent border-none outline-none text-xs text-white placeholder-[#70707D] w-full" oninput="handleSearch(this.value)">
+            <button onclick="clearSearch()" class="text-[#80808E] hover:text-white text-xs ml-2">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- Top Refresh Button -->
+          <button onclick="forceRefresh()" title="Refresh Feed & Flush Cache" class="w-9 h-9 rounded-full bg-[#24242A] hover:bg-[#303038] border border-[#303038] text-[#D0D0DB] hover:text-white flex items-center justify-center smooth-transition">
+            <i class="fa-solid fa-rotate text-xs"></i>
+          </button>
+        </div>
+
+        <!-- Sort Pill (Only visible on Movies & Series) -->
+        <div id="sort-container" class="hidden flex items-center gap-2">
+          <button onclick="cycleSort()" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#1C1C22] border border-[#2B2B36] text-xs font-medium text-white hover:border-white smooth-transition">
+            <i class="fa-solid fa-arrow-down-wide-short text-xs text-[#9E9EA8]"></i>
+            <span id="sort-label">Recommended</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- FILTER PILL BAR (Hidden on Home and Settings) -->
+      <div id="filter-bar" class="hidden px-8 py-2.5 flex items-center gap-2 overflow-x-auto border-b border-[#1A1A1F] bg-[#0F0F0F]">
+        <button onclick="setFilter('All')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-bold bg-white text-black smooth-transition">All</button>
+        <button onclick="setFilter('Recently Watched')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">Recently Watched</button>
+        <button onclick="setFilter('In Progress')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">In Progress</button>
+        <button onclick="setFilter('Action')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">Action</button>
+        <button onclick="setFilter('Comedy')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">Comedy</button>
+        <button onclick="setFilter('Drama')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">Drama</button>
+        <button onclick="setFilter('Sci-Fi')" class="filter-pill px-4 py-1.5 rounded-full text-xs font-medium bg-[#212128] text-[#CCCCCC] hover:text-white smooth-transition">Sci-Fi</button>
+      </div>
+
+      <!-- SCROLLABLE PAGE CONTAINER -->
+      <div id="pages-container" class="flex-1 overflow-y-auto">
+
+        <!-- ================= PAGE 1: HOME ================= -->
+        <div id="page-home" class="page-view px-8 py-6 flex flex-col gap-8">
+          <!-- Shelf: Recent TV Channels -->
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-bold text-white tracking-tight">Recent TV Channels</h2>
+                <p class="text-xs text-[#80808E]">From your favorite live networks and channels</p>
+              </div>
+              <span class="text-xs text-[#666675]">Scroll for more ➔</span>
+            </div>
+            <!-- Horizontal Shelf of Circular Badges -->
+            <div class="flex items-center gap-5 overflow-x-auto pb-2 pt-1">
+              <!-- Channel Item -->
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('BBC One HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-tv text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">BBC One</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('Sky Sports Main', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-baseball text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">Sky Sports</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('HBO HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-film text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">HBO</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('Discovery Channel', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-earth-americas text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">Discovery</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('National Geographic', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-compass text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">Nat Geo</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group flex-shrink-0" onclick="playMedia('CNN International', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#1C1C24] border-2 border-[#2C2C38] group-hover:border-white flex items-center justify-center p-3 smooth-transition shadow-md group-hover:scale-105">
+                  <i class="fa-solid fa-newspaper text-xl text-white"></i>
+                </div>
+                <span class="text-[11px] font-medium text-[#A0A0AD] group-hover:text-white truncate w-20 text-center">CNN</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shelf: Loved Movies -->
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-bold text-white tracking-tight">Loved Movie Shelf • Sci-Fi & Action</h2>
+                <p class="text-xs text-[#80808E]">Ranked by recommendation & ratings</p>
+              </div>
+              <button onclick="navigate('movies')" class="text-xs text-[#FF4B4B] hover:underline font-semibold">View All ➔</button>
+            </div>
+            <div class="grid grid-cols-6 gap-4">
+              <!-- Movie Card -->
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Inception', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&auto=format&fit=crop&q=80" alt="Inception" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 8.8
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">Inception</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Sci-Fi • 2010</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Interstellar', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&auto=format&fit=crop&q=80" alt="Interstellar" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 8.7
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">Interstellar</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Sci-Fi • 2014</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('The Dark Knight', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1509281373149-e957c6296406?w=400&auto=format&fit=crop&q=80" alt="The Dark Knight" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 9.0
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">The Dark Knight</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Action • 2008</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Blade Runner 2049', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80" alt="Blade Runner" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 8.0
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">Blade Runner 2049</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Sci-Fi • 2017</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Dune: Part Two', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80" alt="Dune 2" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 8.6
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">Dune: Part Two</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Adventure • 2024</span>
+                </div>
+              </div>
+
+              <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Avatar: Way of Water', 'Movie')">
+                <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                  <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80" alt="Avatar" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                  <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-[9px]"></i> 7.8
+                  </div>
+                </div>
+                <div class="p-2.5 flex flex-col">
+                  <span class="font-bold text-xs truncate text-white">Avatar: Way of Water</span>
+                  <span class="text-[10px] text-[#8D8D9B] truncate">Sci-Fi • 2022</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= PAGE 2: LIVE TV ================= -->
+        <div id="page-liveTv" class="page-view hidden px-8 py-6 flex flex-col gap-8">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-[#1C1C24]">
+              <h2 class="text-xl font-black text-white">UK Entertainment (24 Channels)</h2>
+              <span class="text-xs text-[#80808E]">D-Pad navigable</span>
+            </div>
+            <div class="grid grid-cols-10 gap-4 mt-4">
+              <!-- Channel circular logo -->
+              <div class="flex flex-col items-center gap-2 cursor-pointer group" onclick="playMedia('BBC One HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#181820] border border-[#2C2C38] group-hover:border-white group-hover:scale-110 flex items-center justify-center p-3 smooth-transition">
+                  <i class="fa-solid fa-tv text-lg text-white"></i>
+                </div>
+                <span class="text-[10px] font-medium text-center text-[#AAAAAA] group-hover:text-white truncate w-16">BBC One</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group" onclick="playMedia('BBC Two HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#181820] border border-[#2C2C38] group-hover:border-white group-hover:scale-110 flex items-center justify-center p-3 smooth-transition">
+                  <i class="fa-solid fa-tv text-lg text-white"></i>
+                </div>
+                <span class="text-[10px] font-medium text-center text-[#AAAAAA] group-hover:text-white truncate w-16">BBC Two</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group" onclick="playMedia('ITV 1 HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#181820] border border-[#2C2C38] group-hover:border-white group-hover:scale-110 flex items-center justify-center p-3 smooth-transition">
+                  <i class="fa-solid fa-tv text-lg text-white"></i>
+                </div>
+                <span class="text-[10px] font-medium text-center text-[#AAAAAA] group-hover:text-white truncate w-16">ITV 1</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group" onclick="playMedia('Channel 4 HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#181820] border border-[#2C2C38] group-hover:border-white group-hover:scale-110 flex items-center justify-center p-3 smooth-transition">
+                  <i class="fa-solid fa-tv text-lg text-white"></i>
+                </div>
+                <span class="text-[10px] font-medium text-center text-[#AAAAAA] group-hover:text-white truncate w-16">Channel 4</span>
+              </div>
+              <div class="flex flex-col items-center gap-2 cursor-pointer group" onclick="playMedia('Channel 5 HD', 'Live TV')">
+                <div class="w-16 h-16 rounded-full bg-[#181820] border border-[#2C2C38] group-hover:border-white group-hover:scale-110 flex items-center justify-center p-3 smooth-transition">
+                  <i class="fa-solid fa-tv text-lg text-white"></i>
+                </div>
+                <span class="text-[10px] font-medium text-center text-[#AAAAAA] group-hover:text-white truncate w-16">Channel 5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= PAGE 3: MOVIES ================= -->
+        <div id="page-movies" class="page-view hidden px-8 py-6 flex flex-col gap-6">
+          <div class="flex items-center justify-between pb-3 border-b border-[#1C1C24]">
+            <h2 class="text-xl font-black text-white">Movies Catalog (Loved Categories)</h2>
+            <span class="text-xs text-[#80808E]">6 Column Grid • 2:3 Vertical Cards</span>
+          </div>
+
+          <div class="grid grid-cols-6 gap-5">
+            <!-- Movie Item with Expanded Image Container to prevent 58px overflow -->
+            <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Oppenheimer', 'Movie')">
+              <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&auto=format&fit=crop&q=80" alt="Oppenheimer" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-[9px]"></i> 8.9
+                </div>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs truncate text-white">Oppenheimer</span>
+                <span class="text-[10px] text-[#8D8D9B] truncate">Biography • 2023</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('The Matrix', 'Movie')">
+              <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=400&auto=format&fit=crop&q=80" alt="Matrix" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-[9px]"></i> 8.7
+                </div>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs truncate text-white">The Matrix</span>
+                <span class="text-[10px] text-[#8D8D9B] truncate">Action • 1999</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('Gladiator', 'Movie')">
+              <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1533928298208-27ff66555d8d?w=400&auto=format&fit=crop&q=80" alt="Gladiator" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-[9px]"></i> 8.5
+                </div>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs truncate text-white">Gladiator</span>
+                <span class="text-[10px] text-[#8D8D9B] truncate">Action • 2000</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= PAGE 4: SERIES ================= -->
+        <div id="page-series" class="page-view hidden px-8 py-6 flex flex-col gap-6">
+          <div class="flex items-center justify-between pb-3 border-b border-[#1C1C24]">
+            <h2 class="text-xl font-black text-white">TV Series & Box Sets</h2>
+            <span class="text-xs text-[#80808E]">Click a show to inspect seasons and episodes</span>
+          </div>
+
+          <div class="grid grid-cols-6 gap-5">
+            <!-- Series Card -->
+            <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="openSeriesDetail('Breaking Bad', 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80', '9.5', '5 Seasons', 'A high school chemistry teacher dying of cancer teams with a former student.')">
+              <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80" alt="Breaking Bad" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-[9px]"></i> 9.5
+                </div>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs truncate text-white">Breaking Bad</span>
+                <span class="text-[10px] text-[#8D8D9B] truncate">Crime Drama • 5 Seasons</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col bg-[#17171D] rounded-xl overflow-hidden border border-[#242430] hover:border-white cursor-pointer group smooth-transition" onclick="openSeriesDetail('Stranger Things', 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400&auto=format&fit=crop&q=80', '8.7', '4 Seasons', 'When a young boy vanishes, a small town uncovers a mystery involving secret experiments.')">
+              <div class="poster-ratio bg-[#202028] relative overflow-hidden">
+                <img src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400&auto=format&fit=crop&q=80" alt="Stranger Things" class="w-full h-full object-cover group-hover:scale-105 smooth-transition">
+                <div class="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-[9px]"></i> 8.7
+                </div>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs truncate text-white">Stranger Things</span>
+                <span class="text-[10px] text-[#8D8D9B] truncate">Sci-Fi • 4 Seasons</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= PAGE 5: SERIES DETAIL ================= -->
+        <div id="page-seriesDetail" class="page-view hidden px-8 py-6 flex flex-col gap-6">
+          <div class="flex items-center gap-3">
+            <button onclick="navigate('series')" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1C1C22] border border-[#2B2B36] text-xs font-semibold text-white hover:bg-[#282832]">
+              <i class="fa-solid fa-arrow-left text-xs"></i> Back to Series
+            </button>
+          </div>
+
+          <!-- Hero Info Card -->
+          <div class="bg-[#16161D] rounded-2xl p-6 border border-[#262632] flex gap-6">
+            <img id="detail-poster" src="" class="w-36 h-52 rounded-xl object-cover bg-black border border-[#2C2C38]">
+            <div class="flex-1 flex flex-col justify-between">
+              <div class="flex flex-col gap-2">
+                <h1 id="detail-title" class="text-3xl font-black text-white">Series Title</h1>
+                <div class="flex items-center gap-3">
+                  <span id="detail-rating" class="text-xs font-bold text-amber-400 flex items-center gap-1">
+                    <i class="fa-solid fa-star text-xs"></i> 9.5
+                  </span>
+                  <span id="detail-seasons-badge" class="px-2 py-0.5 rounded bg-[#282834] text-[11px] text-[#CCCCCC]">5 Seasons</span>
+                </div>
+                <p id="detail-plot" class="text-xs text-[#9E9EA8] max-w-2xl leading-relaxed mt-1">Series description...</p>
+              </div>
+              <button onclick="playMedia('Episode 1: Pilot', 'Series')" class="self-start flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 shadow-md">
+                <i class="fa-solid fa-play text-xs"></i> Play First Episode
+              </button>
+            </div>
+          </div>
+
+          <!-- Season Selector Tabs -->
+          <div class="flex items-center gap-2 border-b border-[#202028] pb-3">
+            <button class="px-4 py-1.5 rounded-full text-xs font-bold bg-white text-black">Season 1</button>
+            <button class="px-4 py-1.5 rounded-full text-xs font-medium bg-[#1F1F26] text-[#A0A0AD] hover:text-white">Season 2</button>
+            <button class="px-4 py-1.5 rounded-full text-xs font-medium bg-[#1F1F26] text-[#A0A0AD] hover:text-white">Season 3</button>
+          </div>
+
+          <!-- Episodes Grid -->
+          <div class="grid grid-cols-5 gap-4">
+            <div class="flex flex-col bg-[#17171E] rounded-xl overflow-hidden border border-[#242432] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('S1:E1 Pilot', 'Series')">
+              <div class="h-28 bg-[#111116] relative flex items-center justify-center">
+                <i class="fa-solid fa-play text-white/50 group-hover:text-white group-hover:scale-125 smooth-transition"></i>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs text-white truncate">E1 • Pilot</span>
+                <span class="text-[10px] text-[#828292]">58 mins</span>
+              </div>
+            </div>
+            <div class="flex flex-col bg-[#17171E] rounded-xl overflow-hidden border border-[#242432] hover:border-white cursor-pointer group smooth-transition" onclick="playMedia('S1:E2 Cat\'s in the Bag', 'Series')">
+              <div class="h-28 bg-[#111116] relative flex items-center justify-center">
+                <i class="fa-solid fa-play text-white/50 group-hover:text-white group-hover:scale-125 smooth-transition"></i>
+              </div>
+              <div class="p-2.5 flex flex-col">
+                <span class="font-bold text-xs text-white truncate">E2 • Cat's in the Bag</span>
+                <span class="text-[10px] text-[#828292]">48 mins</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= PAGE 6: SETTINGS ================= -->
+        <div id="page-settings" class="page-view hidden px-8 py-6 flex flex-col h-full overflow-hidden">
+          <div class="flex items-center gap-3 pb-4 border-b border-[#1F1F26]">
+            <div class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+              <i class="fa-solid fa-gear text-white text-base"></i>
+            </div>
+            <h1 class="text-2xl font-black text-white">Settings</h1>
+          </div>
+
+          <!-- 2-Column TV OS Settings Layout -->
+          <div class="flex-1 flex gap-6 mt-4 overflow-hidden">
+            <!-- Left Categories -->
+            <div class="w-72 flex flex-col gap-2 flex-shrink-0">
+              <div class="flex items-center justify-between text-[11px] font-bold text-[#727282] px-2 mb-1">
+                <span>CATEGORIES</span>
+                <span>D-PAD ▲ ▼</span>
+              </div>
+              <button onclick="setSettingsTab('addToVortex')" id="stab-addToVortex" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-white text-black font-bold smooth-transition">
+                <div class="flex items-center gap-3">
+                  <i class="fa-regular fa-heart text-base"></i>
+                  <div class="text-left">
+                    <div class="text-xs font-bold leading-tight">Add to VortexTube</div>
+                    <div class="text-[10px] text-neutral-600 font-normal">Pins & shelf feeds</div>
+                  </div>
+                </div>
+                <span>&gt;</span>
+              </button>
+
+              <button onclick="setSettingsTab('playlists')" id="stab-playlists" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+                <div class="flex items-center gap-3">
+                  <i class="fa-solid fa-list-ul text-base text-[#8D8D9B]"></i>
+                  <div class="text-left">
+                    <div class="text-xs font-bold leading-tight">Playlists Manager</div>
+                    <div class="text-[10px] text-[#7A7A88] font-normal">IPTV accounts & switches</div>
+                  </div>
+                </div>
+                <span class="text-[#555562]">&gt;</span>
+              </button>
+
+              <button onclick="setSettingsTab('epg')" id="stab-epg" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+                <div class="flex items-center gap-3">
+                  <i class="fa-regular fa-calendar-days text-base text-[#8D8D9B]"></i>
+                  <div class="text-left">
+                    <div class="text-xs font-bold leading-tight">EPG & TV Guide</div>
+                    <div class="text-[10px] text-[#7A7A88] font-normal">XMLTV & time sync</div>
+                  </div>
+                </div>
+                <span class="text-[#555562]">&gt;</span>
+              </button>
+
+              <button onclick="setSettingsTab('about')" id="stab-about" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+                <div class="flex items-center gap-3">
+                  <i class="fa-solid fa-circle-info text-base text-[#8D8D9B]"></i>
+                  <div class="text-left">
+                    <div class="text-xs font-bold leading-tight">About VortexTube</div>
+                    <div class="text-[10px] text-[#7A7A88] font-normal">App version & updates</div>
+                  </div>
+                </div>
+                <span class="text-[#555562]">&gt;</span>
+              </button>
+            </div>
+
+            <!-- Right Detail Panel -->
+            <div class="flex-1 bg-[#121216] border border-[#22222A] rounded-2xl p-6 overflow-y-auto">
+              <!-- Panel 1: Add to VortexTube -->
+              <div id="spanel-addToVortex" class="settings-panel flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-lg font-bold text-white">Add to VortexTube</h3>
+                    <p class="text-xs text-[#828290]">Favorite categories across Live TV, Movies and Series to show on your home feed</p>
+                  </div>
+                  <!-- Category Search Box -->
+                  <div class="flex items-center bg-[#181820] border border-[#2C2C3A] rounded-full px-3 py-1.5 w-60">
+                    <i class="fa-solid fa-magnifying-glass text-xs text-[#888894] mr-2"></i>
+                    <input type="text" placeholder="Search category..." class="bg-transparent border-none outline-none text-xs text-white placeholder-[#666672] w-full" oninput="filterCategories(this.value)">
+                  </div>
+                </div>
+
+                <!-- Sub-type Tabs -->
+                <div class="flex bg-[#17171E] border border-[#252532] rounded-xl p-1 gap-1">
+                  <button class="flex-1 py-1.5 rounded-lg bg-white text-black font-bold text-xs uppercase">Live TV</button>
+                  <button class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white">Movies / VOD</button>
+                  <button class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white">Series</button>
+                </div>
+
+                <!-- 3-4 Column Category Grid -->
+                <div id="category-grid" class="grid grid-cols-4 gap-3 mt-1">
+                  <!-- Category Card -->
+                  <div class="cat-card flex items-center justify-between p-2.5 rounded-xl bg-[#17171D] border border-white/20 cursor-pointer" onclick="toggleCat(this)">
+                    <div class="flex items-center gap-2.5 overflow-hidden">
+                      <div class="w-7 h-7 rounded-lg bg-[#33333D] flex items-center justify-center text-xs text-white">
+                        <i class="fa-solid fa-tv text-[11px]"></i>
+                      </div>
+                      <div class="truncate">
+                        <div class="text-xs font-bold text-white truncate">UK Entertainment</div>
+                        <div class="text-[10px] text-[#8D8D9B]">42 channels</div>
+                      </div>
+                    </div>
+                    <div class="w-5 h-5 rounded-full bg-[#4A4A4A] flex items-center justify-center text-[10px] text-white">
+                      <i class="fa-solid fa-check"></i>
+                    </div>
+                  </div>
+
+                  <div class="cat-card flex items-center justify-between p-2.5 rounded-xl bg-[#17171D] border border-white/20 cursor-pointer" onclick="toggleCat(this)">
+                    <div class="flex items-center gap-2.5 overflow-hidden">
+                      <div class="w-7 h-7 rounded-lg bg-[#33333D] flex items-center justify-center text-xs text-white">
+                        <i class="fa-solid fa-baseball text-[11px]"></i>
+                      </div>
+                      <div class="truncate">
+                        <div class="text-xs font-bold text-white truncate">Sports Live</div>
+                        <div class="text-[10px] text-[#8D8D9B]">68 channels</div>
+                      </div>
+                    </div>
+                    <div class="w-5 h-5 rounded-full bg-[#4A4A4A] flex items-center justify-center text-[10px] text-white">
+                      <i class="fa-solid fa-check"></i>
+                    </div>
+                  </div>
+
+                  <div class="cat-card flex items-center justify-between p-2.5 rounded-xl bg-[#17171D] border border-[#242430] cursor-pointer" onclick="toggleCat(this)">
+                    <div class="flex items-center gap-2.5 overflow-hidden">
+                      <div class="w-7 h-7 rounded-lg bg-[#21212A] flex items-center justify-center text-xs text-[#8D8D9B]">
+                        <i class="fa-solid fa-newspaper text-[11px]"></i>
+                      </div>
+                      <div class="truncate">
+                        <div class="text-xs font-bold text-white truncate">News 24/7</div>
+                        <div class="text-[10px] text-[#8D8D9B]">25 channels</div>
+                      </div>
+                    </div>
+                    <div class="w-5 h-5 rounded-full border border-[#3B3B4A]"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Panel 2: Playlists Manager -->
+              <div id="spanel-playlists" class="settings-panel hidden flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-lg font-bold text-white">Playlists Manager</h3>
+                    <p class="text-xs text-[#828290]">Switch active IPTV account, delete or add new portals</p>
+                  </div>
+                  <button onclick="showAddPortalWizard()" class="px-4 py-2 rounded-xl bg-[#4A4A4A] text-white font-bold text-xs hover:bg-[#5A5A5A] flex items-center gap-2">
+                    <i class="fa-solid fa-plus text-xs"></i> Add New Playlist
+                  </button>
+                </div>
+
+                <!-- Playlist list -->
+                <div class="flex flex-col gap-3 mt-2">
+                  <div class="flex items-center justify-between p-4 rounded-xl bg-[#1A1A22] border border-white/40">
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-lg bg-[#21212A] flex items-center justify-center text-white">
+                        <i class="fa-solid fa-server text-sm"></i>
+                      </div>
+                      <div>
+                        <div class="text-xs font-bold text-white">My Xtream Provider <span class="ml-2 px-1.5 py-0.5 rounded bg-[#2A2A35] text-[10px] text-[#CCCCCC]">XTREAM</span></div>
+                        <div class="text-[10px] text-[#828292]">http://server.iptv:8080 • Active</div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="px-2.5 py-1 rounded-full bg-white text-black font-bold text-[10px]">Active</span>
+                      <button class="p-2 text-red-400 hover:text-red-300"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Panel 3: Add Portal Wizard (Form) -->
+              <div id="spanel-addWizard" class="settings-panel hidden flex flex-col gap-4">
+                <div class="flex items-center gap-3">
+                  <button onclick="setSettingsTab('playlists')" class="p-2 rounded-lg bg-[#1E1E24] border border-[#2C2C38] text-white">
+                    <i class="fa-solid fa-arrow-left text-xs"></i>
+                  </button>
+                  <div>
+                    <h3 class="text-lg font-bold text-white">Add New Playlist / Portal</h3>
+                    <p class="text-xs text-[#828290]">Connect Xtream Codes API, M3U link, or Stalker MAC address</p>
+                  </div>
+                </div>
+
+                <!-- Protocol Selectors -->
+                <div class="flex gap-3 mt-2">
+                  <button class="flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs">Xtream Codes</button>
+                  <button class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs">M3U URL / File</button>
+                  <button class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs">Stalker MAC</button>
+                </div>
+
+                <!-- Form Fields -->
+                <div class="flex flex-col gap-3 mt-2 max-w-lg">
+                  <div>
+                    <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">PLAYLIST NAME</label>
+                    <input type="text" value="My IPTV Service" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                  </div>
+                  <div>
+                    <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">SERVER URL</label>
+                    <input type="text" value="http://provider.stream:8080" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none font-mono mt-1">
+                  </div>
+                  <div class="flex gap-3">
+                    <div class="flex-1">
+                      <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">USERNAME</label>
+                      <input type="text" value="user123" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                    </div>
+                    <div class="flex-1">
+                      <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">PASSWORD</label>
+                      <input type="password" value="••••••••" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                    </div>
+                  </div>
+                  <button onclick="setSettingsTab('playlists')" class="mt-2 py-2.5 px-6 rounded-xl bg-[#4A4A4A] text-white font-bold text-xs hover:bg-[#5A5A5A] self-start">
+                    Save Changes & Ingest
+                  </button>
+                </div>
+              </div>
+
+              <!-- Panel 4: EPG & TV Guide -->
+              <div id="spanel-epg" class="settings-panel hidden flex flex-col gap-4">
+                <h3 class="text-lg font-bold text-white">EPG & TV Guide</h3>
+                <p class="text-xs text-[#828290]">Timeline synchronization, cache configuration, and timezone offsets</p>
+                <div class="p-4 rounded-xl bg-[#17171D] border border-[#262633] flex items-center justify-between">
+                  <div>
+                    <div class="text-xs font-bold text-white">Time Shift Offset</div>
+                    <div class="text-[11px] text-[#8D8D9B]">UTC +00:00 (Auto)</div>
+                  </div>
+                  <span class="px-2 py-1 rounded bg-emerald-950 text-emerald-400 text-[10px] font-mono">Synced</span>
+                </div>
+              </div>
+
+              <!-- Panel 5: About -->
+              <div id="spanel-about" class="settings-panel hidden flex flex-col gap-4">
+                <h3 class="text-lg font-bold text-white">About VortexTube</h3>
+                <p class="text-xs text-[#828290]">Your TV-friendly IPTV player for a better personalized streaming experience.</p>
+                <div class="p-4 rounded-xl bg-[#16161D] border border-[#262633] flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-red-600/20 text-red-500 flex items-center justify-center">
+                      <i class="fa-solid fa-shield-halved text-base"></i>
+                    </div>
+                    <div>
+                      <div class="text-xs font-bold text-white">VortexTube Version 2.4.0</div>
+                      <div class="text-[11px] text-[#8E8E93]">Up to date</div>
+                    </div>
+                  </div>
+                  <button class="px-3.5 py-1.5 rounded-lg bg-[#4A4A4A] text-white text-xs font-bold">Check Updates</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- TV Remote Footer Legend -->
+          <div class="pt-3 mt-4 border-t border-[#1C1C24] flex items-center gap-6 text-[11px] text-[#828292]">
+            <div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-[#1A1A22] border border-[#2E2E3A] font-mono text-white text-[10px]">▲/▼</span> Navigate</div>
+            <div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-[#1A1A22] border border-[#2E2E3A] font-mono text-white text-[10px]">◄/►</span> Switch Panes</div>
+            <div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-[#1A1A22] border border-[#2E2E3A] font-mono text-white text-[10px]">OK</span> Toggle</div>
+            <div class="flex items-center gap-1.5"><span class="px-1.5 py-0.5 rounded bg-[#1A1A22] border border-[#2E2E3A] font-mono text-white text-[10px]">BACK</span> Return</div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- 3. FULLSCREEN VIDEO PLAYER OVERLAY -->
+    <div id="player-modal" class="hidden absolute inset-0 bg-black z-50 flex flex-col justify-between p-6">
+      <!-- Player Header -->
+      <div class="flex items-center justify-between z-10 bg-gradient-to-b from-black/80 to-transparent p-4 rounded-xl">
+        <div class="flex items-center gap-4">
+          <button onclick="closePlayer()" class="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <div>
+            <h2 id="player-title" class="text-base font-bold text-white">Channel Name</h2>
+            <p id="player-subtitle" class="text-xs text-[#8F92A9]">Live Stream</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider">LIVE</span>
+        </div>
+      </div>
+
+      <!-- Center Video Canvas Mockup -->
+      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div class="text-center flex flex-col items-center gap-3">
+          <div class="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+            <i class="fa-solid fa-play text-3xl text-white/40"></i>
+          </div>
+          <span class="text-xs text-neutral-500 font-mono">Stream Playback Surface (Active)</span>
+        </div>
+      </div>
+
+      <!-- Player Bottom Ribbon Controls -->
+      <div class="z-10 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 rounded-2xl flex flex-col gap-3">
+        <!-- Seekbar -->
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-[#AAAAAA] font-mono">14:20</span>
+          <div class="flex-1 h-1.5 rounded-full bg-white/20 relative cursor-pointer">
+            <div class="w-1/3 h-full rounded-full bg-[#FF0033]"></div>
+          </div>
+          <span class="text-xs text-[#AAAAAA] font-mono">45:00</span>
+        </div>
+
+        <!-- Controls row -->
+        <div class="flex items-center justify-between mt-1">
+          <div class="flex items-center gap-4">
+            <button class="text-white hover:text-red-500 text-lg"><i class="fa-solid fa-backward-step"></i></button>
+            <button class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center text-sm font-bold shadow-lg"><i class="fa-solid fa-pause"></i></button>
+            <button class="text-white hover:text-red-500 text-lg"><i class="fa-solid fa-forward-step"></i></button>
+            <div class="flex items-center gap-2 ml-4">
+              <i class="fa-solid fa-volume-high text-xs text-white"></i>
+              <div class="w-20 h-1 bg-white/30 rounded-full">
+                <div class="w-3/4 h-full bg-white rounded-full"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-4 text-white text-sm">
+            <button title="Audio Track"><i class="fa-solid fa-music"></i></button>
+            <button title="Subtitles"><i class="fa-regular fa-closed-captioning"></i></button>
+            <button title="Favorite"><i class="fa-solid fa-heart text-red-500"></i></button>
+            <button onclick="closePlayer()" title="Exit"><i class="fa-solid fa-compress"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JAVASCRIPT NAVIGATION LOGIC -->
+  <script>
+    let activeNav = 'home';
+    let isSidebarExpanded = true;
+    let currentSort = 0;
+    const sortOptions = ['Recommended', 'Name (A - Z)', 'Name (Z - A)', 'Release Date'];
+
+    function navigate(target) {
+      activeNav = target;
+
+      // Update Nav Button Styles
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.classList.remove('bg-[#EEEEEE]', 'text-black', 'font-bold', 'shadow-md');
+        btn.classList.add('text-[#9E9EA8]');
+      });
+      const activeBtn = document.getElementById(`nav-${target}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-[#EEEEEE]', 'text-black', 'font-bold', 'shadow-md');
+        activeBtn.classList.remove('text-[#9E9EA8]');
+      }
+
+      // Hide all pages
+      document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+
+      // Show Selected Page
+      const page = document.getElementById(`page-${target}`);
+      if (page) page.classList.remove('hidden');
+
+      // Header visibility
+      const header = document.getElementById('top-header');
+      const sortContainer = document.getElementById('sort-container');
+      const filterBar = document.getElementById('filter-bar');
+
+      if (target === 'settings') {
+        header.classList.add('hidden');
+        filterBar.classList.add('hidden');
+      } else {
+        header.classList.remove('hidden');
+        if (target === 'home') {
+          filterBar.classList.add('hidden');
+          sortContainer.classList.add('hidden');
+        } else {
+          filterBar.classList.remove('hidden');
+          if (target === 'movies' || target === 'series') {
+            sortContainer.classList.remove('hidden');
+          } else {
+            sortContainer.classList.add('hidden');
+          }
+        }
+      }
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      isSidebarExpanded = !isSidebarExpanded;
+      if (isSidebarExpanded) {
+        sidebar.classList.remove('w-20');
+        sidebar.classList.add('w-64');
+        document.querySelectorAll('.sidebar-text').forEach(el => el.classList.remove('hidden'));
+      } else {
+        sidebar.classList.remove('w-64');
+        sidebar.classList.add('w-20');
+        document.querySelectorAll('.sidebar-text').forEach(el => el.classList.add('hidden'));
+      }
+    }
+
+    function focusSearch() {
+      navigate('home');
+      const input = document.getElementById('main-search-input');
+      input.focus();
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('main-search-input');
+      input.value = '';
+    }
+
+    function handleSearch(val) {
+      console.log('Search query:', val);
+    }
+
+    function cycleSort() {
+      currentSort = (currentSort + 1) % sortOptions.length;
+      document.getElementById('sort-label').textContent = sortOptions[currentSort];
+    }
+
+    function setFilter(name) {
+      document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.classList.remove('bg-white', 'text-black', 'font-bold');
+        pill.classList.add('bg-[#212128]', 'text-[#CCCCCC]', 'font-medium');
+      });
+      event.target.classList.add('bg-white', 'text-black', 'font-bold');
+      event.target.classList.remove('bg-[#212128]', 'text-[#CCCCCC]', 'font-medium');
+    }
+
+    function openSeriesDetail(title, poster, rating, seasons, plot) {
+      document.getElementById('detail-title').textContent = title;
+      document.getElementById('detail-poster').src = poster;
+      document.getElementById('detail-rating').innerHTML = `<i class="fa-solid fa-star text-xs"></i> ${rating}`;
+      document.getElementById('detail-seasons-badge').textContent = seasons;
+      document.getElementById('detail-plot').textContent = plot;
+
+      document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+      document.getElementById('page-seriesDetail').classList.remove('hidden');
+      document.getElementById('filter-bar').classList.add('hidden');
+      document.getElementById('sort-container').classList.add('hidden');
+    }
+
+    function setSettingsTab(tab) {
+      document.querySelectorAll('.settings-tab').forEach(b => {
+        b.classList.remove('bg-white', 'text-black', 'font-bold');
+        b.classList.add('bg-[#141418]', 'border', 'border-[#23232B]', 'text-white');
+      });
+      document.getElementById(`stab-${tab}`).classList.add('bg-white', 'text-black', 'font-bold');
+      document.getElementById(`stab-${tab}`).classList.remove('bg-[#141418]', 'border', 'border-[#23232B]', 'text-white');
+
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById(`spanel-${tab}`).classList.remove('hidden');
+    }
+
+    function showAddPortalWizard() {
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById('spanel-addWizard').classList.remove('hidden');
+    }
+
+    function toggleCat(card) {
+      const isSelected = card.classList.contains('border-white/20');
+      if (isSelected) {
+        card.classList.remove('border-white/20');
+        card.classList.add('border-[#242430]');
+        card.querySelector('div:last-child').className = 'w-5 h-5 rounded-full border border-[#3B3B4A]';
+        card.querySelector('div:last-child').innerHTML = '';
+      } else {
+        card.classList.add('border-white/20');
+        card.classList.remove('border-[#242430]');
+        card.querySelector('div:last-child').className = 'w-5 h-5 rounded-full bg-[#4A4A4A] flex items-center justify-center text-[10px] text-white';
+        card.querySelector('div:last-child').innerHTML = '<i class="fa-solid fa-check"></i>';
+      }
+    }
+
+    function filterCategories(q) {
+      const query = q.toLowerCase();
+      document.querySelectorAll('.cat-card').forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (text.includes(query)) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    function playMedia(title, type) {
+      document.getElementById('player-title').textContent = title;
+      document.getElementById('player-subtitle').textContent = type;
+      document.getElementById('player-modal').classList.remove('hidden');
+    }
+
+    function closePlayer() {
+      document.getElementById('player-modal').classList.add('hidden');
+    }
+
+    function forceRefresh() {
+      alert('VortexTube Cache Refreshed!');
+    }
+  </script>
+</body>
+</html>
