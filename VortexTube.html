@@ -97,23 +97,12 @@
         </nav>
       </div>
 
-      <!-- Bottom Profile & Force Refresh -->
+      <!-- Bottom Force Refresh Button -->
       <div class="flex flex-col gap-2">
         <button onclick="forceRefresh()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#1B1B22] hover:bg-[#252530] text-[#CCCCCC] hover:text-white text-xs font-semibold smooth-transition">
           <i class="fa-solid fa-arrows-rotate text-sm w-5 text-center text-[#FF4B4B]"></i>
           <span class="sidebar-text">Force Refresh</span>
         </button>
-
-        <!-- Active Profile Card -->
-        <div class="flex items-center gap-3 p-2.5 rounded-xl bg-[#1B1B22] border border-[#262632]">
-          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
-            IPTV
-          </div>
-          <div class="sidebar-text overflow-hidden">
-            <div class="text-xs font-bold truncate">Premium Portal</div>
-            <div class="text-[10px] text-emerald-400 font-medium">● Connected</div>
-          </div>
-        </div>
       </div>
     </aside>
 
@@ -516,7 +505,7 @@
                 <span>CATEGORIES</span>
                 <span>D-PAD ▲ ▼</span>
               </div>
-              <button onclick="setSettingsTab('addToVortex')" id="stab-addToVortex" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-white text-black font-bold smooth-transition">
+              <button onclick="setSettingsTab('addToVortex')" id="stab-addToVortex" class="settings-tab flex items-center p-3.5 rounded-xl bg-white text-black font-bold smooth-transition">
                 <div class="flex items-center gap-3">
                   <i class="fa-regular fa-heart text-base"></i>
                   <div class="text-left">
@@ -524,10 +513,9 @@
                     <div class="text-[10px] text-neutral-600 font-normal">Pins & shelf feeds</div>
                   </div>
                 </div>
-                <span>&gt;</span>
               </button>
 
-              <button onclick="setSettingsTab('playlists')" id="stab-playlists" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+              <button onclick="setSettingsTab('playlists')" id="stab-playlists" class="settings-tab flex items-center p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
                 <div class="flex items-center gap-3">
                   <i class="fa-solid fa-list-ul text-base text-[#8D8D9B]"></i>
                   <div class="text-left">
@@ -535,10 +523,9 @@
                     <div class="text-[10px] text-[#7A7A88] font-normal">IPTV accounts & switches</div>
                   </div>
                 </div>
-                <span class="text-[#555562]">&gt;</span>
               </button>
 
-              <button onclick="setSettingsTab('epg')" id="stab-epg" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+              <button onclick="setSettingsTab('epg')" id="stab-epg" class="settings-tab flex items-center p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
                 <div class="flex items-center gap-3">
                   <i class="fa-regular fa-calendar-days text-base text-[#8D8D9B]"></i>
                   <div class="text-left">
@@ -546,10 +533,9 @@
                     <div class="text-[10px] text-[#7A7A88] font-normal">XMLTV & time sync</div>
                   </div>
                 </div>
-                <span class="text-[#555562]">&gt;</span>
               </button>
 
-              <button onclick="setSettingsTab('about')" id="stab-about" class="settings-tab flex items-center justify-between p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
+              <button onclick="setSettingsTab('about')" id="stab-about" class="settings-tab flex items-center p-3.5 rounded-xl bg-[#141418] border border-[#23232B] text-white hover:border-white smooth-transition">
                 <div class="flex items-center gap-3">
                   <i class="fa-solid fa-circle-info text-base text-[#8D8D9B]"></i>
                   <div class="text-left">
@@ -557,7 +543,6 @@
                     <div class="text-[10px] text-[#7A7A88] font-normal">App version & updates</div>
                   </div>
                 </div>
-                <span class="text-[#555562]">&gt;</span>
               </button>
             </div>
 
@@ -579,9 +564,9 @@
 
                 <!-- Sub-type Tabs -->
                 <div class="flex bg-[#17171E] border border-[#252532] rounded-xl p-1 gap-1">
-                  <button class="flex-1 py-1.5 rounded-lg bg-white text-black font-bold text-xs uppercase">Live TV</button>
-                  <button class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white">Movies / VOD</button>
-                  <button class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white">Series</button>
+                  <button id="cat-subtab-live" onclick="setCategorySubtype('live')" class="flex-1 py-1.5 rounded-lg bg-white text-black font-bold text-xs uppercase smooth-transition">Live TV</button>
+                  <button id="cat-subtab-vod" onclick="setCategorySubtype('vod')" class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white smooth-transition">Movies / VOD</button>
+                  <button id="cat-subtab-series" onclick="setCategorySubtype('series')" class="flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white smooth-transition">Series</button>
                 </div>
 
                 <!-- 3-4 Column Category Grid -->
@@ -678,30 +663,37 @@
 
                 <!-- Protocol Selectors -->
                 <div class="flex gap-3 mt-2">
-                  <button class="flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs">Xtream Codes</button>
-                  <button class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs">M3U URL / File</button>
-                  <button class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs">Stalker MAC</button>
+                  <button id="proto-xtream" onclick="setPortalProtocol('xtream')" class="flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs smooth-transition">Xtream Codes</button>
+                  <button id="proto-m3u" onclick="setPortalProtocol('m3u')" class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs hover:text-white smooth-transition">M3U URL / File</button>
+                  <button id="proto-stalker" onclick="setPortalProtocol('stalker')" class="flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs hover:text-white smooth-transition">Stalker MAC</button>
                 </div>
 
                 <!-- Form Fields -->
                 <div class="flex flex-col gap-3 mt-2 max-w-lg">
                   <div>
                     <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">PLAYLIST NAME</label>
-                    <input type="text" value="My IPTV Service" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                    <input id="form-name" type="text" value="My IPTV Service" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
                   </div>
                   <div>
-                    <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">SERVER URL</label>
-                    <input type="text" value="http://provider.stream:8080" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none font-mono mt-1">
+                    <label id="form-url-label" class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">SERVER URL / PORTAL DOMAIN</label>
+                    <input id="form-url" type="text" value="http://provider.stream:8080" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none font-mono mt-1">
                   </div>
-                  <div class="flex gap-3">
+                  <!-- Xtream Credentials Row -->
+                  <div id="form-xtream-creds" class="flex gap-3">
                     <div class="flex-1">
                       <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">USERNAME</label>
-                      <input type="text" value="user123" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                      <input id="form-user" type="text" value="user123" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
                     </div>
                     <div class="flex-1">
-                      <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">PASSWORD</label>
-                      <input type="password" value="••••••••" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
+                      <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">PASSWORD / PIN</label>
+                      <input id="form-pass" type="password" value="••••••••" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none mt-1">
                     </div>
+                  </div>
+                  <!-- Stalker MAC Row -->
+                  <div id="form-stalker-creds" class="hidden flex flex-col gap-1">
+                    <label class="text-[10px] font-bold text-[#9E9EA8] tracking-wider">MAC ADDRESS</label>
+                    <input id="form-mac" type="text" value="00:1A:79:B4:C2:5E" class="w-full bg-[#181820] border border-[#2C2C3A] rounded-lg p-2.5 text-xs text-white outline-none font-mono">
+                    <span class="text-[10px] text-[#70707E]">Device ID & serial will be automatically derived mathematically</span>
                   </div>
                   <button onclick="setSettingsTab('playlists')" class="mt-2 py-2.5 px-6 rounded-xl bg-[#4A4A4A] text-white font-bold text-xs hover:bg-[#5A5A5A] self-start">
                     Save Changes & Ingest
@@ -853,21 +845,21 @@
       const sortContainer = document.getElementById('sort-container');
       const filterBar = document.getElementById('filter-bar');
 
+      // Keep search header always visible on all pages (including Settings)
+      header.classList.remove('hidden');
+
       if (target === 'settings') {
-        header.classList.add('hidden');
         filterBar.classList.add('hidden');
+        sortContainer.classList.add('hidden');
+      } else if (target === 'home') {
+        filterBar.classList.add('hidden');
+        sortContainer.classList.add('hidden');
       } else {
-        header.classList.remove('hidden');
-        if (target === 'home') {
-          filterBar.classList.add('hidden');
-          sortContainer.classList.add('hidden');
+        filterBar.classList.remove('hidden');
+        if (target === 'movies' || target === 'series') {
+          sortContainer.classList.remove('hidden');
         } else {
-          filterBar.classList.remove('hidden');
-          if (target === 'movies' || target === 'series') {
-            sortContainer.classList.remove('hidden');
-          } else {
-            sortContainer.classList.add('hidden');
-          }
+          sortContainer.classList.add('hidden');
         }
       }
     }
@@ -943,6 +935,101 @@
     function showAddPortalWizard() {
       document.querySelectorAll('.settings-panel').forEach(p => p.classList.add('hidden'));
       document.getElementById('spanel-addWizard').classList.remove('hidden');
+      setPortalProtocol('xtream');
+    }
+
+    function setPortalProtocol(proto) {
+      const btnXtream = document.getElementById('proto-xtream');
+      const btnM3u = document.getElementById('proto-m3u');
+      const btnStalker = document.getElementById('proto-stalker');
+      const urlLabel = document.getElementById('form-url-label');
+      const urlInput = document.getElementById('form-url');
+      const xtreamCreds = document.getElementById('form-xtream-creds');
+      const stalkerCreds = document.getElementById('form-stalker-creds');
+
+      [btnXtream, btnM3u, btnStalker].forEach(b => {
+        b.className = 'flex-1 py-2.5 rounded-xl bg-[#17171D] border border-[#282834] text-[#CCCCCC] font-medium text-xs hover:text-white smooth-transition';
+      });
+
+      if (proto === 'xtream') {
+        btnXtream.className = 'flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs smooth-transition';
+        urlLabel.textContent = 'SERVER URL / PORTAL DOMAIN';
+        urlInput.value = 'http://provider.stream:8080';
+        xtreamCreds.classList.remove('hidden');
+        stalkerCreds.classList.add('hidden');
+      } else if (proto === 'm3u') {
+        btnM3u.className = 'flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs smooth-transition';
+        urlLabel.textContent = 'M3U PLAYLIST URL OR LOCAL PATH';
+        urlInput.value = 'http://provider.stream:8080/get.php?username=user&password=pass&type=m3u_plus';
+        xtreamCreds.classList.add('hidden');
+        stalkerCreds.classList.add('hidden');
+      } else if (proto === 'stalker') {
+        btnStalker.className = 'flex-1 py-2.5 rounded-xl bg-white text-black font-bold text-xs smooth-transition';
+        urlLabel.textContent = 'PORTAL URL';
+        urlInput.value = 'http://stalker-server.net/c/';
+        xtreamCreds.classList.add('hidden');
+        stalkerCreds.classList.remove('hidden');
+      }
+    }
+
+    const categoriesData = {
+      live: [
+        { name: 'UK Entertainment', count: 42, icon: 'fa-tv', selected: true },
+        { name: 'Sports Live', count: 68, icon: 'fa-baseball', selected: true },
+        { name: 'News 24/7', count: 25, icon: 'fa-newspaper', selected: false },
+        { name: 'Documentary', count: 31, icon: 'fa-earth-americas', selected: false },
+        { name: 'Kids & Family', count: 18, icon: 'fa-child', selected: true },
+        { name: 'Music HD', count: 22, icon: 'fa-music', selected: false },
+        { name: 'Cinema Live', count: 15, icon: 'fa-film', selected: true },
+        { name: 'USA Networks', count: 54, icon: 'fa-satellite-dish', selected: false },
+      ],
+      vod: [
+        { name: 'Action & Adventure', count: 320, icon: 'fa-burst', selected: true },
+        { name: 'Sci-Fi & Fantasy', count: 195, icon: 'fa-robot', selected: true },
+        { name: 'Comedy', count: 140, icon: 'fa-face-laugh-beam', selected: false },
+        { name: 'Horror & Thriller', count: 88, icon: 'fa-ghost', selected: false },
+        { name: 'Drama Classics', count: 210, icon: 'fa-masks-theater', selected: true },
+        { name: 'Animation', count: 115, icon: 'fa-wand-magic-sparkles', selected: false },
+      ],
+      series: [
+        { name: 'Crime & Drama Box Sets', count: 85, icon: 'fa-clapperboard', selected: true },
+        { name: 'Sci-Fi Series', count: 62, icon: 'fa-space-shuttle', selected: true },
+        { name: 'Sitcoms & Comedy', count: 48, icon: 'fa-tv', selected: false },
+        { name: 'Mini-Series & Docu', count: 39, icon: 'fa-film', selected: false },
+      ]
+    };
+
+    function setCategorySubtype(subtype) {
+      ['live', 'vod', 'series'].forEach(t => {
+        const btn = document.getElementById(`cat-subtab-${t}`);
+        if (t === subtype) {
+          btn.className = 'flex-1 py-1.5 rounded-lg bg-white text-black font-bold text-xs uppercase smooth-transition';
+        } else {
+          btn.className = 'flex-1 py-1.5 rounded-lg text-[#8D8D9B] font-bold text-xs uppercase hover:text-white smooth-transition';
+        }
+      });
+
+      renderCategories(categoriesData[subtype]);
+    }
+
+    function renderCategories(list) {
+      const grid = document.getElementById('category-grid');
+      grid.innerHTML = list.map(item => `
+        <div class="cat-card flex items-center justify-between p-2.5 rounded-xl bg-[#17171D] border ${item.selected ? 'border-white/20' : 'border-[#242430]'} cursor-pointer" onclick="toggleCat(this)">
+          <div class="flex items-center gap-2.5 overflow-hidden">
+            <div class="w-7 h-7 rounded-lg ${item.selected ? 'bg-[#33333D] text-white' : 'bg-[#21212A] text-[#8D8D9B]'} flex items-center justify-center text-xs">
+              <i class="fa-solid ${item.icon} text-[11px]"></i>
+            </div>
+            <div class="truncate">
+              <div class="text-xs font-bold text-white truncate">${item.name}</div>
+              <div class="text-[10px] text-[#8D8D9B]">${item.count} items</div>
+            </div>
+          </div>
+          <div class="w-5 h-5 rounded-full ${item.selected ? 'bg-[#4A4A4A] flex items-center justify-center text-[10px] text-white' : 'border border-[#3B3B4A]'}">
+            ${item.selected ? '<i class="fa-solid fa-check"></i>' : ''}
+          </div>
+        </div>
+      `).join('');
     }
 
     function toggleCat(card) {
